@@ -1,0 +1,38 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Virtual environments
+.venv/
+venv/
+
+# Node.js artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Frontend tooling caches
+.parcel-cache/
+.eslintcache
+
+# Data artifacts
+backend/data/
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+
