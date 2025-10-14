@@ -51,7 +51,13 @@ def _batched(iterable: Iterable[str], size: int) -> Iterable[List[str]]:
 def _reset_database(df: pd.DataFrame) -> None:
     """Пересобрать SQLite-базу с данными FAQ."""
     if DB_PATH.exists():
-        DB_PATH.unlink()
+        try:
+            DB_PATH.unlink()
+        except PermissionError as exc:
+            raise RuntimeError(
+                "Не удалось перезаписать базу FAQ (faq.db). Закройте процессы, которые используют файл, "
+                "например запущенный backend или открытый просмотрщик БД, и повторите попытку."
+            ) from exc
 
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -129,4 +135,3 @@ def build_faq_index() -> None:
 
 if __name__ == "__main__":
     build_faq_index()
-

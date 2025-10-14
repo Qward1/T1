@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -30,7 +30,7 @@ def _load_embeddings() -> np.ndarray:
 
 
 def _vectorize_query(text: str) -> np.ndarray:
-    """Получить нормализованный эмбеддинг пользовательского запроса."""
+    """Преобразовать пользовательский запрос в нормализованный вектор."""
     client = get_scibox_client()
     [embedding] = client.embed([text])
     vector = np.array(embedding, dtype="float32")
@@ -45,9 +45,10 @@ def semantic_search(
     *,
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
+    products: Optional[Sequence[str]] = None,
     top_k: int = 3,
 ) -> List[Dict[str, Any]]:
-    """Выполнить семантический поиск по нужному сегменту либо по всему FAQ."""
+    """Выполнить семантический поиск с возможным учётом сегмента и упомянутых продуктов."""
     query = query.strip()
     if not query:
         return []
@@ -66,6 +67,21 @@ def semantic_search(
     indices = np.array([idx - 1 for idx in candidate_ids], dtype=int)
     candidate_vectors = embeddings[indices]
     scores = candidate_vectors @ query_vector
+
+    products_lower = [p.casefold() for p in (products or []) if p]
+    if products_lower:
+        scores = scores.copy()
+        records_map = fetch_records_by_ids(candidate_ids)
+        for idx, record_id in enumerate(candidate_ids):
+            record = records_map.get(record_id)
+            if not record:
+                continue
+            text = f"{record.get('question', '')} {record.get('answer', '')}".casefold()
+            boost = 0.0
+            for product in products_lower:
+                if product and product in text:
+                    boost += 0.1
+            scores[idx] += boost
 
     top_indices = np.argsort(-scores)[:top_k]
     selected_ids = [candidate_ids[idx] for idx in top_indices]
@@ -123,3 +139,4 @@ def _extract_content(message: Any) -> str:
         ]
         return "".join(parts)
     return ""
+

@@ -163,6 +163,7 @@ const App = () => {
           categoryConfidence={analysis?.category_confidence ?? Number.NaN}
           subcategory={analysis?.subcategory ?? ""}
           subcategoryConfidence={analysis?.subcategory_confidence ?? Number.NaN}
+          products={analysis?.products ?? []}
           error={error}
           loading={loadingAnalyze}
         />

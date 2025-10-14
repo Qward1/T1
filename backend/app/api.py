@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from .classifiers import classify_and_ner
 from .recommenders import DATA_DIR, finalize, semantic_search
+from openai import RateLimitError
 
 app = FastAPI(title="Smart Support Backend")
 
@@ -43,6 +44,7 @@ class AnalyzeResponse(BaseModel):
     subcategory_confidence: float
     confidence: float
     entities: Dict[str, str]
+    products: List[str]
     recommendations: List[Recommendation]
 
 
@@ -76,7 +78,13 @@ def healthz() -> Dict[str, str]:
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
-    classification = classify_and_ner(request.text)
+    try:
+        classification = classify_and_ner(request.text)
+    except RateLimitError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Модель временно недоступна из-за ограничения на количество запросов. Повторите попытку чуть позже.",
+        ) from exc
 
     use_segment = (
         classification["category"]
@@ -89,6 +97,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         request.text,
         category=classification["category"] if use_segment else None,
         subcategory=classification["subcategory"] if use_segment else None,
+        products=classification.get("products") or [],
         top_k=3,
     )
 
@@ -103,13 +112,20 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         subcategory_confidence=float(classification["subcategory_confidence"]),
         confidence=float(classification["confidence"]),
         entities=dict(classification["entities"]),
+        products=list(classification.get("products") or []),
         recommendations=[Recommendation(**item) for item in recommendations],
     )
 
 
 @app.post("/respond", response_model=RespondResponse)
 def respond(request: RespondRequest) -> RespondResponse:
-    answer = finalize(request.template, request.entities)
+    try:
+        answer = finalize(request.template, request.entities)
+    except RateLimitError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Модель временно перегружена и не может сформировать ответ. Повторите попытку позже.",
+        ) from exc
     if not answer:
         raise HTTPException(status_code=400, detail="Не удалось сформировать ответ.")
     return RespondResponse(answer=answer)
@@ -127,4 +143,3 @@ def feedback(request: FeedbackRequest) -> FeedbackResponse:
         fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     return FeedbackResponse(status="сохранено")
-

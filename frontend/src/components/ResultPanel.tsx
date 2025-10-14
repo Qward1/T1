@@ -3,6 +3,7 @@ interface ResultPanelProps {
   categoryConfidence: number;
   subcategory: string;
   subcategoryConfidence: number;
+  products: string[];
   error?: string | null;
   loading?: boolean;
 }
@@ -15,6 +16,7 @@ const ResultPanel = ({
   categoryConfidence,
   subcategory,
   subcategoryConfidence,
+  products,
   error,
   loading,
 }: ResultPanelProps) => {
@@ -49,6 +51,10 @@ const ResultPanel = ({
           <div className="classification-row">
             <span className="label">Уверенность</span>
             <span>{formatPercent(subcategoryConfidence)}</span>
+          </div>
+          <div className="classification-row">
+            <span className="label">Продукты</span>
+            <span>{products.length ? products.join(", ") : "не обнаружены"}</span>
           </div>
         </>
       )}

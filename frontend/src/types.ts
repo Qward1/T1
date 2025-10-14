@@ -17,6 +17,7 @@ export interface AnalyzeResponse {
   subcategory_confidence: number;
   confidence: number;
   entities: EntityMap;
+  products: string[];
   recommendations: Recommendation[];
 }
 
