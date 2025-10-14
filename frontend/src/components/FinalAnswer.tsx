@@ -3,8 +3,11 @@ interface FinalAnswerProps {
   onChange: (value: string) => void;
   onGenerate: () => void;
   onCopy: () => void;
+  onSubmit: () => void;
   canGenerate: boolean;
+  canSubmit: boolean;
   loading: boolean;
+  submitting: boolean;
 }
 
 const FinalAnswer = ({
@@ -12,8 +15,11 @@ const FinalAnswer = ({
   onChange,
   onGenerate,
   onCopy,
+  onSubmit,
   canGenerate,
+  canSubmit,
   loading,
+  submitting,
 }: FinalAnswerProps) => {
   return (
     <section className="panel">
@@ -25,6 +31,9 @@ const FinalAnswer = ({
           </button>
           <button type="button" onClick={onGenerate} disabled={!canGenerate || loading}>
             {loading ? "Генерация..." : "Сформировать"}
+          </button>
+          <button type="button" onClick={onSubmit} disabled={!canSubmit || submitting}>
+            {submitting ? "Отправляем..." : "Отправить ответ"}
           </button>
         </div>
       </div>

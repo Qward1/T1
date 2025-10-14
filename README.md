@@ -1,102 +1,105 @@
 # Smart Support (VTB Belarus)
 
-Интеллектуальный помощник операторов поддержки: классифицирует обращения, ищет релевантные FAQ и собирает финальный ответ строго по шаблонам.
+End-to-end assistant for support agents: classifies customer messages, finds the best FAQ templates, and assembles final answers strictly on templates.
 
 ---
 
-## Требования
+## Requirements
 
-- Python 3.11+ (проверено на 3.13)
-- Node.js ≥ 18 и npm
-- Установленный Docker (опционально, для контейнерного запуска)
-- Токен SciBox (`SCIBOX_API_KEY`)
+- Python 3.11+
+- Node.js 18+ and npm
+- Docker (optional)
+- SciBox API token (SCIBOX_API_KEY)
 
 ---
 
-## Настройка окружения
+## Environment Setup
 
-1. Скопируйте переменные окружения:
-   ```bash
+1. Copy the sample environment file:
+   `ash
    cp .env.example .env
-   ```
-2. Отредактируйте `.env`:
-   ```ini
-   SCIBOX_API_KEY=ваш_ключ
+   `
+2. Update .env (local run example on Windows):
+   `ini
+   SCIBOX_API_KEY=your_scibox_token
    SCIBOX_BASE_URL=https://llm.t1v.scibox.tech/v1
    FAQ_PATH=C:\Users\Admin\Desktop\T1\smart_support_vtb_belarus_faq_final.xlsx
-   ```
-   > Для работы в контейнере замените `FAQ_PATH` на `/app/data/smart_support_vtb_belarus_faq_final.xlsx`.
-3. Установите зависимости backend (один раз):
-   ```bash
+   `
+   *In containers set FAQ_PATH=/app/data/smart_support_vtb_belarus_faq_final.xlsx.*
+3. Install backend dependencies:
+   `ash
    py -3 -m pip install -r backend/requirements.txt
-   ```
+   `
 
 ---
 
-## Единый локальный запуск (backend + frontend)
+## One-command local launch (backend + frontend)
 
-Скрипт `scripts/start_local.py` автоматически:
-- обновляет SQLite-базу и эмбеддинги (`backend/data/faq.db`, `faq_embeddings.npy`);
-- запускает FastAPI (`http://localhost:8000`);
-- запускает Vite (`http://localhost:5173`).
+Use the helper script � it rebuilds the FAQ index, starts FastAPI and launches Vite dev server:
 
-Команда:
-```bash
+`ash
 py -3 scripts/start_local.py
-```
+`
 
-На первом запуске дополнительно поставятся зависимости фронтенда (`npm install`). Остановить приложение — `Ctrl+C`.
+- Backend: http://localhost:8000
+- Frontend: http://localhost:5173
+- Stop with Ctrl+C.
+
+At the first run the script installs frontend dependencies (
+pm install).
 
 ---
 
-## Docker Compose (альтернатива)
+## Docker Compose alternative
 
-1. Верните в `.env` контейнерный путь `FAQ_PATH=/app/data/smart_support_vtb_belarus_faq_final.xlsx`.
-2. Запустите:
-   ```bash
+1. Ensure FAQ_PATH=/app/data/smart_support_vtb_belarus_faq_final.xlsx in .env.
+2. Start containers:
+   `ash
    docker compose up --build
-   ```
+   `
 
-Контейнеры:
-- backend — `http://localhost:8000`
-- frontend — `http://localhost:8080`
-
----
-
-## Полезные команды
-
-| Команда | Назначение |
-|---------|------------|
-| `py -3 -m backend.app.build_index` | Пересобрать базу FAQ и эмбеддинги |
-| `py -3 -m uvicorn backend.app.api:app --reload` | Запустить backend вручную |
-| `cd frontend && npm run dev` | Запустить frontend отдельно |
-| `py -3 -m pip install -r backend/requirements.txt` | Установить/обновить зависимости backend |
-| `cd frontend && npm install` | Установить/обновить зависимости frontend |
+Services:
+- backend > http://localhost:8000
+- frontend > http://localhost:8080
 
 ---
 
-## Что делает сервис
+## Key features
 
-1. **Zero-shot классификация** по списку категорий и подкатегорий из SQLite.
-2. **Семантический поиск**: запрос сравнивается с FAQ только выбранного сегмента; при confidence < 0.5 производится поиск по всему справочнику.
-3. **Формирование ответа** строго по шаблону FAQ, с аккуратной подстановкой найденных сущностей.
-4. **Фронтенд** отображает уверенности, сущности, топ-3 шаблонов и позволяет финально отредактировать ответ и отправить обратную связь.
-
----
-
-## Где искать данные
-
-- `backend/data/faq.db` — SQLite с исходными FAQ
-- `backend/data/faq_embeddings.npy` — нормализованные эмбеддинги вопросов
-- `backend/data/feedback.jsonl` — журнал обратной связи операторов
+1. **Two-step zero-shot classification** (category + subcategory) with product hints extracted from the request.
+2. **Segmented semantic search** by category/subcategory with fallback to the whole FAQ when confidence is low.
+3. **Template finalisation** � LLM rewrites the selected template with detected entities only.
+4. **Runtime analytics** � operators can mark �Correct/Incorrect� for classification and �Yes/No� for templates. Accuracy per category/subcategory, template score, and recent history are stored in SQLite and shown in the �Analytics� panel.
+5. **Request history** � every submitted answer (Send answer) is logged for auditing.
 
 ---
 
-## Частые проблемы
+## Databases & files
 
-- **`Failed to fetch` во фронтенде** — не запущен backend. Используйте `scripts/start_local.py` или запустите Uvicorn вручную.
-- **`Connection error` при построении индекса** — проверьте `SCIBOX_API_KEY`/`SCIBOX_BASE_URL` и доступ к интернету.
-- **Excel обновился** — удалите `backend/data/faq.db` и `faq_embeddings.npy`, затем снова выполните `py -3 scripts/start_local.py`.
+- ackend/data/faq.db � FAQ catalogue imported from Excel.
+- ackend/data/faq_embeddings.npy � normalised embeddings for FAQ questions.
+- ackend/data/stats.db � analytics storage (classification votes, template votes, history).
+- ackend/data/feedback.jsonl � raw operator feedback payloads (legacy endpoint).
 
-Удачной работы! Если потребуется изменить инфраструктуру (добавить новые источники данных или модели), пересоберите индекс и перезапустите скрипт.
+---
 
+## Useful commands
+
+| Command | Description |
+|---------|-------------|
+| py -3 -m backend.app.build_index | Rebuild FAQ DB and embeddings |
+| py -3 -m uvicorn backend.app.api:app --reload | Manual backend launch |
+| cd frontend && npm run dev | Manual frontend launch |
+| py -3 -m pip install -r backend/requirements.txt | Install/refresh backend deps |
+| cd frontend && npm install | Install/refresh frontend deps |
+
+---
+
+## Troubleshooting
+
+- **Failed to fetch on frontend** � backend is not running. Start scripts/start_local.py or launch Uvicorn manually.
+- **Connection error while building the index** � check SciBox credentials and internet access.
+- **SQLite file locked** � stop running backend processes (or DB viewers) and rerun the script.
+- **Excel updated** � delete ackend/data/faq.db and ackend/data/faq_embeddings.npy, then run py -3 scripts/start_local.py again.
+
+Enjoy supporting your agents with live analytics and template control!

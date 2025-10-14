@@ -1,9 +1,13 @@
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
+  AnalyticsData,
+  ClassificationFeedbackPayload,
   FeedbackRequest,
+  HistoryPayload,
   RespondRequest,
   RespondResponse,
+  TemplateFeedbackPayload,
 } from "../types";
 
 const envBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -52,6 +56,35 @@ export async function respond(payload: RespondRequest): Promise<RespondResponse>
 
 export async function feedback(payload: FeedbackRequest): Promise<void> {
   await request("/feedback", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getAnalytics(): Promise<AnalyticsData> {
+  return request<AnalyticsData>("/analytics", { method: "GET" });
+}
+
+export async function sendClassificationFeedback(
+  payload: ClassificationFeedbackPayload,
+): Promise<AnalyticsData> {
+  return request<AnalyticsData>("/metrics/classification", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendTemplateFeedback(
+  payload: TemplateFeedbackPayload,
+): Promise<AnalyticsData> {
+  return request<AnalyticsData>("/metrics/template", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function submitHistory(payload: HistoryPayload): Promise<AnalyticsData> {
+  return request<AnalyticsData>("/history", {
     method: "POST",
     body: JSON.stringify(payload),
   });

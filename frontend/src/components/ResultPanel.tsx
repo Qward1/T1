@@ -4,6 +4,8 @@ interface ResultPanelProps {
   subcategory: string;
   subcategoryConfidence: number;
   products: string[];
+  onFeedback?: (isCorrect: boolean) => void;
+  feedbackDisabled?: boolean;
   error?: string | null;
   loading?: boolean;
 }
@@ -17,6 +19,8 @@ const ResultPanel = ({
   subcategory,
   subcategoryConfidence,
   products,
+  onFeedback,
+  feedbackDisabled = false,
   error,
   loading,
 }: ResultPanelProps) => {
@@ -56,6 +60,26 @@ const ResultPanel = ({
             <span className="label">Продукты</span>
             <span>{products.length ? products.join(", ") : "не обнаружены"}</span>
           </div>
+          {onFeedback && (
+            <div className="feedback-actions">
+              <button
+                type="button"
+                onClick={() => onFeedback(true)}
+                disabled={feedbackDisabled}
+                className="positive"
+              >
+                Верно
+              </button>
+              <button
+                type="button"
+                onClick={() => onFeedback(false)}
+                disabled={feedbackDisabled}
+                className="negative"
+              >
+                Неверно
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

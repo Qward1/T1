@@ -6,11 +6,20 @@ from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from openai import RateLimitError
 from pydantic import BaseModel, Field
 
 from .classifiers import classify_and_ner
 from .recommenders import DATA_DIR, finalize, semantic_search
-from openai import RateLimitError
+from .storage import (
+    get_classification_stats,
+    get_recent_history,
+    get_template_stats,
+    init_stats_db,
+    record_classification_feedback,
+    record_request_history,
+    record_template_feedback,
+)
 
 app = FastAPI(title="Smart Support Backend")
 
@@ -21,6 +30,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+init_stats_db()
+
+
+class ClassificationStat(BaseModel):
+    category: str
+    subcategory: str
+    correct: int
+    incorrect: int
+    accuracy: float
+
+
+class TemplateStats(BaseModel):
+    positive: int
+    negative: int
+    accuracy: float
+
+
+class HistoryItem(BaseModel):
+    id: int
+    query: str
+    category: str
+    subcategory: str
+    template_id: int | None = None
+    final_answer: str
+    created_at: str
+
+
+class AnalyticsResponse(BaseModel):
+    classification: List[ClassificationStat]
+    template: TemplateStats
+    history: List[HistoryItem]
 
 
 class AnalyzeRequest(BaseModel):
@@ -43,9 +84,10 @@ class AnalyzeResponse(BaseModel):
     subcategory: str
     subcategory_confidence: float
     confidence: float
+    answer: str
     entities: Dict[str, str]
-    products: List[str]
-    recommendations: List[Recommendation]
+    alternatives: List[Recommendation]
+    trace: Dict[str, float | bool]
 
 
 class RespondRequest(BaseModel):
@@ -71,6 +113,35 @@ class FeedbackResponse(BaseModel):
     status: str
 
 
+class ClassificationFeedbackRequest(BaseModel):
+    category: str
+    subcategory: str
+    is_correct: bool
+
+
+class TemplateFeedbackRequest(BaseModel):
+    is_positive: bool
+
+
+class HistoryRequest(BaseModel):
+    query: str
+    category: str | None = None
+    subcategory: str | None = None
+    template_id: int | None = None
+    final_answer: str
+
+
+def _build_analytics_response() -> AnalyticsResponse:
+    classification_stats = [ClassificationStat(**row) for row in get_classification_stats()]
+    template_stats = TemplateStats(**get_template_stats())
+    history_items = [HistoryItem(**row) for row in get_recent_history()]
+    return AnalyticsResponse(
+        classification=classification_stats,
+        template=template_stats,
+        history=history_items,
+    )
+
+
 @app.get("/healthz")
 def healthz() -> Dict[str, str]:
     return {"status": "ok"}
@@ -83,8 +154,10 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     except RateLimitError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Модель временно недоступна из-за ограничения на количество запросов. Повторите попытку чуть позже.",
+            detail="Модель временно недоступна из-за лимита запросов. Повторите попытку чуть позже.",
         ) from exc
+
+    start_time = datetime.now()
 
     use_segment = (
         classification["category"]
@@ -102,8 +175,30 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     )
 
     if use_segment and not recommendations:
-        # Если сегмент пуст, пробуем глобальный поиск
         recommendations = semantic_search(request.text, top_k=3)
+        used_fallback = True
+    else:
+        used_fallback = not use_segment
+
+    answer = ""
+    if recommendations:
+        top_template = recommendations[0]
+        answer = finalize(top_template["answer"], classification["entities"])
+
+    latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+    alternatives = [
+        Recommendation(
+            id=item["id"],
+            category=item["category"],
+            subcategory=item["subcategory"],
+            audience=item.get("audience"),
+            question=item["question"],
+            answer=item["answer"],
+            score=item.get("score", 0.0),
+        )
+        for item in recommendations
+    ]
 
     return AnalyzeResponse(
         category=classification["category"],
@@ -111,9 +206,13 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         subcategory=classification["subcategory"],
         subcategory_confidence=float(classification["subcategory_confidence"]),
         confidence=float(classification["confidence"]),
+        answer=answer,
         entities=dict(classification["entities"]),
-        products=list(classification.get("products") or []),
-        recommendations=[Recommendation(**item) for item in recommendations],
+        alternatives=alternatives,
+        trace={
+            "used_fallback": used_fallback,
+            "latency_ms": round(latency_ms, 2),
+        },
     )
 
 
@@ -124,7 +223,7 @@ def respond(request: RespondRequest) -> RespondResponse:
     except RateLimitError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Модель временно перегружена и не может сформировать ответ. Повторите попытку позже.",
+            detail="Модель перегружена и не смогла сформировать ответ. Повторите попытку позже.",
         ) from exc
     if not answer:
         raise HTTPException(status_code=400, detail="Не удалось сформировать ответ.")
@@ -143,3 +242,32 @@ def feedback(request: FeedbackRequest) -> FeedbackResponse:
         fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     return FeedbackResponse(status="сохранено")
+
+
+@app.post("/metrics/classification", response_model=AnalyticsResponse)
+def classification_feedback(request: ClassificationFeedbackRequest) -> AnalyticsResponse:
+    record_classification_feedback(request.category, request.subcategory, request.is_correct)
+    return _build_analytics_response()
+
+
+@app.post("/metrics/template", response_model=AnalyticsResponse)
+def template_feedback(request: TemplateFeedbackRequest) -> AnalyticsResponse:
+    record_template_feedback(request.is_positive)
+    return _build_analytics_response()
+
+
+@app.post("/history", response_model=AnalyticsResponse)
+def history(request: HistoryRequest) -> AnalyticsResponse:
+    record_request_history(
+        request.query,
+        request.category,
+        request.subcategory,
+        request.template_id,
+        request.final_answer,
+    )
+    return _build_analytics_response()
+
+
+@app.get("/analytics", response_model=AnalyticsResponse)
+def analytics() -> AnalyticsResponse:
+    return _build_analytics_response()

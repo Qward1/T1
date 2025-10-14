@@ -1,7 +1,7 @@
 interface FeedbackFormProps {
   notes: string;
   onNotesChange: (value: string) => void;
-  onSend: (isHelpful: boolean) => void;
+  onSend: (isPositive: boolean) => void;
   disabled: boolean;
   loading: boolean;
   status: "idle" | "success" | "error";
@@ -19,7 +19,7 @@ const FeedbackForm = ({
 }: FeedbackFormProps) => {
   return (
     <section className="panel">
-      <h2>Обратная связь</h2>
+      <h2>Шаблон ответа</h2>
       <textarea
         value={notes}
         onChange={(event) => onNotesChange(event.target.value)}
@@ -34,7 +34,7 @@ const FeedbackForm = ({
           disabled={disabled || loading}
           className="positive"
         >
-          Полезно
+          Да
         </button>
         <button
           type="button"
@@ -42,7 +42,7 @@ const FeedbackForm = ({
           disabled={disabled || loading}
           className="negative"
         >
-          Не помогло
+          Нет
         </button>
       </div>
       {status !== "idle" && <p className={`feedback-message ${status}`}>{message}</p>}

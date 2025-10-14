@@ -9,55 +9,53 @@ from .scibox_client import get_scibox_client
 PRODUCT_LIST = [
     "MORE",
     "more",
-    "Форсаж",
-    "форсаж",
-    "Комплимент",
-    "комплимент",
+    "\u0424\u043e\u0440\u0441\u0430\u0436",
+    "\u0444\u043e\u0440\u0441\u0430\u0436",
+    "\u041a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442",
+    "\u043a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442",
     "Signature",
     "signature",
     "Infinite",
     "infinite",
     "PLAT/ON",
     "plat/on",
-    "Портмоне 2.0",
-    "портмоне 2.0",
-    "Отличник",
-    "отличник",
-    "ЧЕРЕПАХА",
-    "черепаха",
-    "КСТАТИ",
-    "кстати",
-    "кредит дальше",
-    "кредит легко",
-    "Старт",
+    "\u041f\u043e\u0440\u0442\u043c\u043e\u043d\u0435 2.0",
+    "\u043f\u043e\u0440\u0442\u043c\u043e\u043d\u0435 2.0",
+    "\u041e\u0442\u043b\u0438\u0447\u043d\u0438\u043a",
+    "\u043e\u0442\u043b\u0438\u0447\u043d\u0438\u043a",
+    "\u0427\u0415\u0420\u0415\u041f\u0410\u0425\u0410",
+    "\u0447\u0435\u0440\u0435\u043f\u0430\u0445\u0430",
+    "\u041a\u0421\u0422\u0410\u0422\u0418",
+    "\u043a\u0441\u0442\u0430\u0442\u0438",
+    "\u043a\u0440\u0435\u0434\u0438\u0442 \u0434\u0430\u043b\u044c\u0448\u0435",
+    "\u043a\u0440\u0435\u0434\u0438\u0442 \u043b\u0435\u0433\u043a\u043e",
+    "\u0421\u0442\u0430\u0440\u0442",
+    "\u0441\u0442\u0430\u0440\u0442",
 ]
 
-_PRODUCT_MAP: Dict[str, str] = {}
-for item in PRODUCT_LIST:
-    _PRODUCT_MAP.setdefault(item.casefold(), item)
+_PRODUCT_MAP: Dict[str, str] = {item.casefold(): item for item in PRODUCT_LIST if item}
 
 CATEGORY_PROMPT = (
-    "Тебе нужно определить основную категорию обращения клиента банка. "
-    "Используй предложенный список категорий и сведения об упомянутых продуктах."
+    "You must classify the customer request into the most relevant main category. "
+    "Use only the provided options and consider the mentioned products."
 )
 
 SUBCATEGORY_PROMPT = (
-    "Определи подкатегорию обращения внутри выбранной категории. "
-    "Учитывай список доступных подкатегорий и найденные в запросе продукты."
+    "Select the most relevant subcategory inside the chosen category. "
+    "Use the provided subcategory list and the detected products."
 )
 
 ENTITIES_PROMPT = (
-    "Ты извлекаешь сущности из текста обращения. "
-    "Верни строго JSON вида {\"product\": \"\", \"currency\": \"\", \"amount\": \"\", "
+    "Extract entities from the customer request. "
+    "Return strict JSON of the form {\"product\": \"\", \"currency\": \"\", \"amount\": \"\", "
     "\"date\": \"\", \"problem\": \"\", \"geo\": \"\"}. "
-    "Используй пустые строки, если сущность не найдена."
+    "Use empty strings when an entity is not present."
 )
 
 EXPECTED_ENTITY_KEYS = {"product", "currency", "amount", "date", "problem", "geo"}
 
 
 def _extract_content(message: Any) -> str:
-    """Извлечь текст из ответа чат-модели."""
     content = getattr(message, "content", "")
     if isinstance(content, str):
         return content
@@ -72,7 +70,6 @@ def _extract_content(message: Any) -> str:
 
 
 def _validate_confidence(value: Any) -> float:
-    """Нормализовать confidence в диапазон [0, 1]."""
     try:
         confidence = float(value)
     except (TypeError, ValueError):
@@ -81,7 +78,6 @@ def _validate_confidence(value: Any) -> float:
 
 
 def _detect_products(text: str) -> List[str]:
-    """Найти упомянутые продукты из списка PRODUCT_LIST."""
     normalized = text.casefold()
     seen: set[str] = set()
     matches: List[str] = []
@@ -99,15 +95,14 @@ def _classify_with_choices(
     response_key: str,
     products: Sequence[str],
 ) -> Dict[str, Any]:
-    """Выполнить zero-shot классификацию по заданным вариантам."""
     if not choices:
         return {response_key: "", "confidence": 0.0}
 
     options = "\n".join(f"- {choice}" for choice in choices)
     products_block = (
-        "Упомянутые продукты:\n" + "\n".join(f"- {name}" for name in products)
+        "Mentioned products:\n" + "\n".join(f"- {name}" for name in products)
         if products
-        else "Упомянутые продукты: не обнаружены."
+        else "Mentioned products: none."
     )
 
     client = get_scibox_client()
@@ -117,8 +112,8 @@ def _classify_with_choices(
             {
                 "role": "user",
                 "content": (
-                    f"Варианты:\n{options}\n\n{products_block}\n\n"
-                    f"Запрос клиента:\n{user_text}"
+                    f"Options:\n{options}\n\n{products_block}\n\n"
+                    f"Customer request:\n{user_text}"
                 ),
             },
         ],
@@ -128,7 +123,7 @@ def _classify_with_choices(
     try:
         payload = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Модель вернула некорректный JSON: {content}") from exc
+        raise RuntimeError(f"Classifier returned invalid JSON: {content}") from exc
 
     label = str(payload.get(response_key, "") or "").strip()
     confidence = _validate_confidence(payload.get("confidence"))
@@ -139,7 +134,6 @@ def _classify_with_choices(
 
 
 def _extract_entities(text: str) -> Dict[str, str]:
-    """Извлечь сущности из запроса клиента."""
     client = get_scibox_client()
     response = client.chat(
         [
@@ -152,9 +146,7 @@ def _extract_entities(text: str) -> Dict[str, str]:
     try:
         payload = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Модель вернула некорректный JSON при извлечении сущностей: {content}"
-        ) from exc
+        raise RuntimeError(f"Entity extractor returned invalid JSON: {content}") from exc
 
     return {
         key: str(payload.get(key, "") or "").strip()
@@ -163,9 +155,8 @@ def _extract_entities(text: str) -> Dict[str, str]:
 
 
 def classify_and_ner(text: str) -> Dict[str, Any]:
-    """Определить категорию, подкатегорию и извлечь сущности из текста обращения."""
     if not text or not text.strip():
-        raise ValueError("Текст для классификации должен быть непустой строкой.")
+        raise ValueError("Text for classification must be a non-empty string.")
 
     products = _detect_products(text)
 
@@ -200,4 +191,3 @@ def classify_and_ner(text: str) -> Dict[str, Any]:
         "entities": entities,
         "products": products,
     }
-

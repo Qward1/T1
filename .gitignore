@@ -36,3 +36,11 @@ Thumbs.db
 # Logs
 *.log
 
+
+# App directories
+app/__pycache__/
+app/data/*.db
+# default sqlite caches
+*.sqlite
+*.sqlite3
+

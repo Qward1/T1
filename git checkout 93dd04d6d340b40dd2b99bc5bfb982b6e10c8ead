@@ -1,0 +1,35 @@
+[33mcommit 93dd04d6d340b40dd2b99bc5bfb982b6e10c8ead[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mQwardBranch[m[33m)[m
+Author: Vlad Demin <vlad-demin-2007@mail.ru>
+Date:   Tue Oct 14 23:04:04 2025 +0300
+
+    Добавление сущности поиска продуктов
+
+[33mcommit b07fe17ce8d34b29ac3a248ed17a331155b06188[m
+Author: Vlad Demin <vlad-demin-2007@mail.ru>
+Date:   Tue Oct 14 22:12:17 2025 +0300
+
+    feat(app): add integrated launcher and db-based retrieval
+
+[33mcommit 86fc1e960eb42fc9830c9cc3c7939bd63dd07201[m[33m ([m[1;31morigin/dev[m[33m, [m[1;32mdev[m[33m)[m
+Author: Vladislav Demin <133807724+Qward1@users.noreply.github.com>
+Date:   Tue Oct 14 17:50:23 2025 +0300
+
+    Delete recommend.md
+
+[33mcommit 88cfd6c78ee7737520269c7b1f57ebdd19818f6b[m[33m ([m[1;32mmain[m[33m)[m
+Author: Vlad Demin <vlad-demin-2007@mail.ru>
+Date:   Tue Oct 14 17:48:39 2025 +0300
+
+    feat: initial backend and frontend setup
+
+[33mcommit 7abf60310be0b863fcf98f7cfcfcf38c6192c668[m
+Author: Vlad Demin <vlad-demin-2007@mail.ru>
+Date:   Tue Oct 14 17:30:32 2025 +0300
+
+    chore: add gitignore
+
+[33mcommit 9b2bd47ba929bb4ecbc0b47e8a010bb44a4ff256[m
+Author: Vladislav Demin <133807724+Qward1@users.noreply.github.com>
+Date:   Tue Oct 14 15:58:39 2025 +0300
+
+    Initial commit
