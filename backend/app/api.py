@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .classifiers import classify_and_ner
-from .recommenders import DATA_DIR, finalize, rerank, retrieve
+from .recommenders import DATA_DIR, finalize, semantic_search
 
 app = FastAPI(title="Smart Support Backend")
 
@@ -30,7 +30,7 @@ class Recommendation(BaseModel):
     id: int
     category: str
     subcategory: str
-    audience: str
+    audience: str | None = None
     question: str
     answer: str
     score: float
@@ -38,7 +38,9 @@ class Recommendation(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     category: str
+    category_confidence: float
     subcategory: str
+    subcategory_confidence: float
     confidence: float
     entities: Dict[str, str]
     recommendations: List[Recommendation]
@@ -76,16 +78,32 @@ def healthz() -> Dict[str, str]:
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     classification = classify_and_ner(request.text)
 
-    candidates = retrieve(request.text, top_k=10)
-    ranked = rerank(candidates, classification)
-    top3 = ranked[:3]
+    use_segment = (
+        classification["category"]
+        and classification["subcategory"]
+        and classification["category_confidence"] >= 0.5
+        and classification["subcategory_confidence"] >= 0.5
+    )
+
+    recommendations = semantic_search(
+        request.text,
+        category=classification["category"] if use_segment else None,
+        subcategory=classification["subcategory"] if use_segment else None,
+        top_k=3,
+    )
+
+    if use_segment and not recommendations:
+        # Если сегмент пуст, пробуем глобальный поиск
+        recommendations = semantic_search(request.text, top_k=3)
 
     return AnalyzeResponse(
         category=classification["category"],
+        category_confidence=float(classification["category_confidence"]),
         subcategory=classification["subcategory"],
+        subcategory_confidence=float(classification["subcategory_confidence"]),
         confidence=float(classification["confidence"]),
         entities=dict(classification["entities"]),
-        recommendations=[Recommendation(**item) for item in top3],
+        recommendations=[Recommendation(**item) for item in recommendations],
     )
 
 
@@ -93,7 +111,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
 def respond(request: RespondRequest) -> RespondResponse:
     answer = finalize(request.template, request.entities)
     if not answer:
-        raise HTTPException(status_code=400, detail="Unable to generate response.")
+        raise HTTPException(status_code=400, detail="Не удалось сформировать ответ.")
     return RespondResponse(answer=answer)
 
 
@@ -108,5 +126,5 @@ def feedback(request: FeedbackRequest) -> FeedbackResponse:
     with feedback_path.open("a", encoding="utf-8") as fp:
         fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
-    return FeedbackResponse(status="recorded")
+    return FeedbackResponse(status="сохранено")
 

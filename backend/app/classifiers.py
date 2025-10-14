@@ -3,45 +3,35 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Sequence
 
+from .repository import fetch_categories, fetch_subcategories
 from .scibox_client import get_scibox_client
 
-SYSTEM_PROMPT = (
-    "Ты классификатор обращений клиентов банка. "
-    "Проанализируй входящий текст и верни строго JSON без пояснений "
-    'в следующем формате: {"category": "...", "subcategory": "...", '
-    '"confidence": 0.0, "entities": {"product": "", "currency": "", '
-    '"amount": "", "date": "", "problem": "", "geo": ""}}.\n\n'
-    "Требования:\n"
-    "- Указывай confidence числом от 0 до 1.\n"
-    "- Если значение для сущности отсутствует, используй пустую строку.\n"
-    "- Не добавляй комментариев, разметки или пояснений."
+CATEGORY_PROMPT = (
+    "У тебя есть список основных категорий обращений клиентов банка. "
+    "Выбери одну категорию из списка, которая лучше всего описывает запрос пользователя, "
+    "и верни JSON вида {\"category\": \"...\", \"confidence\": 0.0}. "
+    "Не добавляй другие поля."
+)
+
+SUBCATEGORY_PROMPT = (
+    "У тебя есть список подкатегорий для указанной основной категории. "
+    "Выбери одну подкатегорию из списка, которая лучше всего описывает запрос пользователя, "
+    "и верни JSON вида {\"subcategory\": \"...\", \"confidence\": 0.0}. "
+    "Не добавляй другие поля."
+)
+
+ENTITIES_PROMPT = (
+    "Ты извлекаешь сущности из текста обращения. "
+    "Верни строго JSON вида {\"product\": \"\", \"currency\": \"\", \"amount\": \"\", "
+    "\"date\": \"\", \"problem\": \"\", \"geo\": \"\"}. "
+    "Используй пустые строки, если сущность не найдена."
 )
 
 EXPECTED_ENTITY_KEYS = {"product", "currency", "amount", "date", "problem", "geo"}
 
 
-def _validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure the payload matches the required schema."""
-    for key in ("category", "subcategory"):
-        payload[key] = str(payload.get(key, "")).strip()
-
-    try:
-        confidence = float(payload.get("confidence", 0.0))
-    except (TypeError, ValueError):
-        confidence = 0.0
-    payload["confidence"] = max(0.0, min(1.0, confidence))
-
-    entities = payload.get("entities", {}) or {}
-    payload["entities"] = {
-        key: str(entities.get(key, "") or "").strip()
-        for key in EXPECTED_ENTITY_KEYS
-    }
-
-    return payload
-
-
 def _extract_content(message: Any) -> str:
-    """Safely extract text content from a chat completion message."""
+    """Аккуратно извлечь текст из ответа чат-модели."""
     content = getattr(message, "content", "")
     if isinstance(content, str):
         return content
@@ -55,26 +45,102 @@ def _extract_content(message: Any) -> str:
     return ""
 
 
-def classify_and_ner(text: str) -> Dict[str, Any]:
-    """
-    Classify the input text and extract entities using the SciBox LLM.
-    """
-    if not text or not text.strip():
-        raise ValueError("Text for classification must be a non-empty string.")
+def _validate_confidence(value: Any) -> float:
+    """Нормализовать confidence в диапазон [0, 1]."""
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, confidence))
 
+
+def _classify_with_choices(
+    prompt: str,
+    user_text: str,
+    choices: Sequence[str],
+    response_key: str,
+) -> Dict[str, Any]:
+    """Выполнить zero-shot классификацию по списку вариантов."""
+    if not choices:
+        return {response_key: "", "confidence": 0.0}
+
+    options = "\n".join(f"- {choice}" for choice in choices)
     client = get_scibox_client()
     response = client.chat(
         [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text.strip()},
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": f"Варианты:\n{options}\n\nЗапрос:\n{user_text}",
+            },
         ],
         response_format={"type": "json_object"},
     )
-
     content = _extract_content(response)
     try:
         payload = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Classifier returned invalid JSON: {content}") from exc
+        raise RuntimeError(f"Модель вернула некорректный JSON: {content}") from exc
 
-    return _validate_payload(payload)
+    label = str(payload.get(response_key, "") or "").strip()
+    confidence = _validate_confidence(payload.get("confidence"))
+    if label not in choices:
+        label = ""
+        confidence = 0.0
+    return {response_key: label, "confidence": confidence}
+
+
+def _extract_entities(text: str) -> Dict[str, str]:
+    """Извлечь сущности из текста обращения."""
+    client = get_scibox_client()
+    response = client.chat(
+        [
+            {"role": "system", "content": ENTITIES_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        response_format={"type": "json_object"},
+    )
+    content = _extract_content(response)
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Модель вернула некорректный JSON при извлечении сущностей: {content}") from exc
+
+    return {
+        key: str(payload.get(key, "") or "").strip()
+        for key in EXPECTED_ENTITY_KEYS
+    }
+
+
+def classify_and_ner(text: str) -> Dict[str, Any]:
+    """Определить категорию и подкатегорию обращения и извлечь сущности."""
+    if not text or not text.strip():
+        raise ValueError("Текст для классификации должен быть непустой строкой.")
+
+    categories = fetch_categories()
+    main_result = _classify_with_choices(
+        CATEGORY_PROMPT,
+        text.strip(),
+        categories,
+        "category",
+    )
+
+    subcategories = fetch_subcategories(main_result["category"]) if main_result["category"] else []
+    sub_result = _classify_with_choices(
+        SUBCATEGORY_PROMPT,
+        text.strip(),
+        subcategories,
+        "subcategory",
+    )
+
+    entities = _extract_entities(text.strip())
+
+    return {
+        "category": main_result["category"],
+        "subcategory": sub_result["subcategory"],
+        "category_confidence": main_result["confidence"],
+        "subcategory_confidence": sub_result["confidence"],
+        "confidence": min(main_result["confidence"], sub_result["confidence"]),
+        "entities": entities,
+    }
+

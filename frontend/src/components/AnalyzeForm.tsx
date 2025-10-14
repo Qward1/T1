@@ -32,3 +32,4 @@ const AnalyzeForm = ({ value, onChange, onSubmit, loading }: AnalyzeFormProps) =
 };
 
 export default AnalyzeForm;
+

@@ -46,8 +46,7 @@ const App = () => {
       setAnalysis(result);
       setEntities(result.entities);
       setRecommendations(result.recommendations);
-      const first = result.recommendations[0] ?? null;
-      setSelectedTemplate(first);
+      setSelectedTemplate(result.recommendations[0] ?? null);
       setFinalAnswer("");
     } catch (exception) {
       const message =
@@ -85,9 +84,7 @@ const App = () => {
       setFinalAnswer(result.answer);
     } catch (exception) {
       const message =
-        exception instanceof Error
-          ? exception.message
-          : "Не удалось сформировать ответ.";
+        exception instanceof Error ? exception.message : "Не удалось сформировать ответ.";
       setFeedbackStatus("error");
       setFeedbackMessage(message);
     } finally {
@@ -114,7 +111,7 @@ const App = () => {
       setFeedbackMessage("Ответ скопирован в буфер обмена.");
     } catch {
       setFeedbackStatus("error");
-      setFeedbackMessage("Не удалось скопировать ответ. Скопируйте вручную.");
+      setFeedbackMessage("Не удалось скопировать ответ. Попробуйте вручную.");
     }
   };
 
@@ -138,7 +135,7 @@ const App = () => {
         notes: feedbackNotes || null,
       });
       setFeedbackStatus("success");
-      setFeedbackMessage("Спасибо! Отзыв сохранен.");
+      setFeedbackMessage("Спасибо! Отзыв сохранён.");
     } catch (exception) {
       const message =
         exception instanceof Error ? exception.message : "Не удалось отправить отзыв.";
@@ -163,8 +160,9 @@ const App = () => {
       <div className="column">
         <ResultPanel
           category={analysis?.category ?? ""}
+          categoryConfidence={analysis?.category_confidence ?? Number.NaN}
           subcategory={analysis?.subcategory ?? ""}
-          confidence={analysis?.confidence ?? Number.NaN}
+          subcategoryConfidence={analysis?.subcategory_confidence ?? Number.NaN}
           error={error}
           loading={loadingAnalyze}
         />
@@ -196,3 +194,4 @@ const App = () => {
 };
 
 export default App;
+

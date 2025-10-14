@@ -13,7 +13,7 @@ DEFAULT_EMBEDDING_MODEL = "bge-m3"
 
 
 class SciBoxClient:
-    """Simple wrapper around the SciBox OpenAI-compatible client."""
+    """Простая обёртка над OpenAI-совместимым клиентом SciBox."""
 
     def __init__(
         self,
@@ -35,9 +35,7 @@ class SciBoxClient:
         temperature: float = 0.0,
         **kwargs,
     ) -> ChatCompletionMessage:
-        """
-        Execute a chat completion request and return the first message choice.
-        """
+        """Выполнить чат-запрос и вернуть первое сообщение из ответа."""
         response = self._client.chat.completions.create(
             model=model,
             messages=list(messages),
@@ -53,9 +51,7 @@ class SciBoxClient:
         model: str = DEFAULT_EMBEDDING_MODEL,
         **kwargs,
     ) -> List[List[float]]:
-        """
-        Generate embeddings for the given texts.
-        """
+        """Сгенерировать эмбеддинги для переданных текстов."""
         payload = list(texts)
         if not payload:
             return []
@@ -69,5 +65,5 @@ class SciBoxClient:
 
 @lru_cache
 def get_scibox_client() -> SciBoxClient:
-    """Convenience accessor for a lazily instantiated client."""
+    """Вернуть лениво инициализированный экземпляр клиента SciBox."""
     return SciBoxClient()

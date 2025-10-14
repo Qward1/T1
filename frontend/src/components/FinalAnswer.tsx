@@ -31,7 +31,7 @@ const FinalAnswer = ({
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Сформируйте ответ на основе шаблона..."
+        placeholder="Отредактируйте ответ перед отправкой клиенту..."
         rows={10}
       />
     </section>

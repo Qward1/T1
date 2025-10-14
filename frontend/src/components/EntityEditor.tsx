@@ -39,3 +39,4 @@ const EntityEditor = ({ entities, onChange, disabled = false }: EntityEditorProp
 };
 
 export default EntityEditor;
+

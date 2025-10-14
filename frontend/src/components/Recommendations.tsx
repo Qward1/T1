@@ -27,7 +27,7 @@ const Recommendations = ({ items, selectedId, onSelect }: RecommendationsProps) 
                   <span className="score">{Math.round(item.score * 100) / 100}</span>
                 </header>
                 <p className="question">{item.question}</p>
-                <p className="audience">Аудитория: {item.audience || "не указано"}</p>
+                <p className="audience">Аудитория: {item.audience ?? "не указано"}</p>
               </button>
             </li>
           ))}
@@ -38,3 +38,4 @@ const Recommendations = ({ items, selectedId, onSelect }: RecommendationsProps) 
 };
 
 export default Recommendations;
+

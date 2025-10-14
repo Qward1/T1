@@ -1,91 +1,91 @@
 from __future__ import annotations
 
-import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional
 
-import faiss  # type: ignore
 import numpy as np
 
+from .repository import fetch_all_ids, fetch_ids_for_segment, fetch_records_by_ids
 from .scibox_client import get_scibox_client
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-INDEX_PATH = DATA_DIR / "faq.index"
-RECORDS_PATH = DATA_DIR / "faq_records.json"
+EMBEDDINGS_PATH = DATA_DIR / "faq_embeddings.npy"
 
 FINALIZE_PROMPT = (
     "Ты помощник оператора поддержки. "
     "У тебя есть шаблон ответа. "
-    "Используй только информацию из шаблона, чтобы сформировать финальный ответ. "
-    "Если в шаблоне присутствуют фигурные скобки или плейсхолдеры, аккуратно подставь значения из entities. "
+    "Используй только информацию из шаблона, чтобы подготовить финальный текст для клиента. "
+    "Если в шаблоне встречаются плейсхолдеры в фигурных скобках, аккуратно подставь значения из entities. "
     "Не добавляй новых фактов и не упоминай, что шаблон был использован."
 )
 
 
 @lru_cache
-def _load_index() -> faiss.Index:
-    if not INDEX_PATH.exists():
-        raise FileNotFoundError(f"FAISS index not found at {INDEX_PATH}. Run build_index.py first.")
-    return faiss.read_index(str(INDEX_PATH))
+def _load_embeddings() -> np.ndarray:
+    """Загрузить матрицу нормализованных эмбеддингов вопросов FAQ."""
+    if not EMBEDDINGS_PATH.exists():
+        raise FileNotFoundError("Файл с эмбеддингами не найден. Запустите build_index.py.")
+    return np.load(EMBEDDINGS_PATH)
 
 
-@lru_cache
-def _load_records() -> List[Dict[str, str]]:
-    if not RECORDS_PATH.exists():
-        raise FileNotFoundError(f"FAQ records not found at {RECORDS_PATH}. Run build_index.py first.")
-    return json.loads(RECORDS_PATH.read_text(encoding="utf-8"))
-
-
-def retrieve(text: str, top_k: int = 10) -> List[Dict[str, str]]:
-    """Return top-k FAQ templates most relevant to the query."""
-    if not text or not text.strip():
-        return []
-
+def _vectorize_query(text: str) -> np.ndarray:
+    """Получить нормализованный эмбеддинг пользовательского запроса."""
     client = get_scibox_client()
     [embedding] = client.embed([text])
+    vector = np.array(embedding, dtype="float32")
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+        return vector
+    return vector / norm
 
-    query = np.array([embedding], dtype="float32")
-    faiss.normalize_L2(query)
 
-    index = _load_index()
-    records = _load_records()
+def semantic_search(
+    query: str,
+    *,
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
+    top_k: int = 3,
+) -> List[Dict[str, Any]]:
+    """Выполнить семантический поиск по нужному сегменту либо по всему FAQ."""
+    query = query.strip()
+    if not query:
+        return []
 
-    k = min(top_k, len(records))
-    scores, indices = index.search(query, k)
+    query_vector = _vectorize_query(query)
+    embeddings = _load_embeddings()
 
-    results: List[Dict[str, str]] = []
-    for score, idx in zip(scores[0], indices[0]):
-        if idx < 0:
+    if category and subcategory:
+        candidate_ids = fetch_ids_for_segment(category, subcategory)
+    else:
+        candidate_ids = fetch_all_ids()
+
+    if not candidate_ids:
+        return []
+
+    indices = np.array([idx - 1 for idx in candidate_ids], dtype=int)
+    candidate_vectors = embeddings[indices]
+    scores = candidate_vectors @ query_vector
+
+    top_indices = np.argsort(-scores)[:top_k]
+    selected_ids = [candidate_ids[idx] for idx in top_indices]
+    id_to_score = {candidate_ids[idx]: float(scores[idx]) for idx in top_indices}
+
+    records = fetch_records_by_ids(selected_ids)
+
+    results: List[Dict[str, Any]] = []
+    for record_id in selected_ids:
+        record = records.get(record_id)
+        if not record:
             continue
-        record = records[idx].copy()
-        record["score"] = float(score)
-        results.append(record)
+        entry = dict(record)
+        entry["score"] = id_to_score.get(record_id, 0.0)
+        results.append(entry)
     return results
 
 
-def rerank(
-    candidates: Sequence[Dict[str, str]],
-    meta: Dict[str, str] | None = None,
-) -> List[Dict[str, str]]:
-    """Apply simple rule-based boosts using classification metadata."""
-    meta = meta or {}
-    category = (meta.get("category") or "").lower()
-    subcategory = (meta.get("subcategory") or "").lower()
-
-    def _score(candidate: Dict[str, str]) -> float:
-        score = float(candidate.get("score", 0.0))
-        if candidate.get("category", "").lower() == category:
-            score += 0.1
-        if candidate.get("subcategory", "").lower() == subcategory:
-            score += 0.1
-        return score
-
-    return sorted(candidates, key=_score, reverse=True)
-
-
 def finalize(template: str, entities: Dict[str, str]) -> str:
-    """Generate the final response by adapting the template with entities."""
+    """Сформировать финальный ответ на основе шаблона и найденных сущностей."""
     template = template.strip()
     if not template:
         return ""
@@ -96,7 +96,7 @@ def finalize(template: str, entities: Dict[str, str]) -> str:
         f"{template}\n\n"
         "Известные сущности:\n"
         f"{entity_pairs or 'нет данных'}\n\n"
-        "Сформируй финальный ответ."
+        "Подготовь финальный ответ."
     )
 
     client = get_scibox_client()
@@ -111,10 +111,11 @@ def finalize(template: str, entities: Dict[str, str]) -> str:
 
 
 def _extract_content(message: Any) -> str:
+    """Аккуратно извлечь текст из ответа чат-модели."""
     content = getattr(message, "content", "")
     if isinstance(content, str):
         return content
-    if isinstance(content, Sequence):
+    if isinstance(content, list):
         parts = [
             getattr(part, "text", "")
             for part in content

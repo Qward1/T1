@@ -4,7 +4,7 @@ export interface Recommendation {
   id: number;
   category: string;
   subcategory: string;
-  audience: string;
+  audience: string | null;
   question: string;
   answer: string;
   score: number;
@@ -12,7 +12,9 @@ export interface Recommendation {
 
 export interface AnalyzeResponse {
   category: string;
+  category_confidence: number;
   subcategory: string;
+  subcategory_confidence: number;
   confidence: number;
   entities: EntityMap;
   recommendations: Recommendation[];
@@ -40,4 +42,3 @@ export interface FeedbackRequest {
   is_helpful: boolean;
   notes?: string | null;
 }
-

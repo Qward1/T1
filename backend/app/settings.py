@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application configuration loaded from environment variables."""
+    """Настройки приложения, загружаемые из переменных окружения."""
 
     scibox_api_key: str = Field(..., env="SCIBOX_API_KEY")
     scibox_base_url: str = Field(..., env="SCIBOX_BASE_URL")
@@ -18,17 +18,16 @@ class Settings(BaseSettings):
 
     @property
     def faq_source_path(self) -> Path:
-        """Return an absolute path to the FAQ Excel source file."""
+        """Вернуть абсолютный путь к Excel-файлу с FAQ."""
         return self.faq_path.expanduser().resolve()
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Return cached application settings.
+    """Получить кешированные настройки приложения.
 
     Raises:
-        RuntimeError: if the configuration is invalid or incomplete.
+        RuntimeError: если конфигурация отсутствует или заполнена некорректно.
     """
     try:
         settings = Settings()

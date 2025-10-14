@@ -1,12 +1,23 @@
 interface ResultPanelProps {
   category: string;
+  categoryConfidence: number;
   subcategory: string;
-  confidence: number;
+  subcategoryConfidence: number;
   error?: string | null;
   loading?: boolean;
 }
 
-const ResultPanel = ({ category, subcategory, confidence, error, loading }: ResultPanelProps) => {
+const formatPercent = (value: number) =>
+  Number.isFinite(value) ? `${Math.round(value * 100)}%` : "—";
+
+const ResultPanel = ({
+  category,
+  categoryConfidence,
+  subcategory,
+  subcategoryConfidence,
+  error,
+  loading,
+}: ResultPanelProps) => {
   if (error) {
     return (
       <section className="panel danger">
@@ -28,14 +39,16 @@ const ResultPanel = ({ category, subcategory, confidence, error, loading }: Resu
             <span>{category || "—"}</span>
           </div>
           <div className="classification-row">
+            <span className="label">Уверенность</span>
+            <span>{formatPercent(categoryConfidence)}</span>
+          </div>
+          <div className="classification-row">
             <span className="label">Подкатегория</span>
             <span>{subcategory || "—"}</span>
           </div>
           <div className="classification-row">
             <span className="label">Уверенность</span>
-            <span>
-              {Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : "—"}
-            </span>
+            <span>{formatPercent(subcategoryConfidence)}</span>
           </div>
         </>
       )}
@@ -44,3 +57,4 @@ const ResultPanel = ({ category, subcategory, confidence, error, loading }: Resu
 };
 
 export default ResultPanel;
+
