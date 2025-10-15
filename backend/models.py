@@ -38,6 +38,22 @@ class SearchResponse(BaseModel):
     latency_ms: float
 
 
+class SpellCheckRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100_000)
+    session_id: Optional[str] = Field(None, max_length=128)
+
+    @validator("text")
+    def _trim_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Text must not be empty.")
+        return value
+
+
+class SpellCheckResponse(BaseModel):
+    corrected: str
+
+
 class ClassifyRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100_000)
     session_id: Optional[str] = Field(None, max_length=128)

@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Deque, Dict, Optional
+from typing import Deque, Dict, Iterable, Optional
 
 from fastapi import HTTPException, status
 
@@ -23,6 +23,8 @@ from ..models import (
     SearchRequest,
     SearchResponse,
     SearchResult,
+    SpellCheckRequest,
+    SpellCheckResponse,
     StatsSummary,
     TemplateVoteRequest,
 )
@@ -44,6 +46,14 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 init_storage()
+
+SEARCH_SCORE_THRESHOLD = 0.5
+
+SPELLCHECK_SYSTEM_PROMPT = (
+    "Ты редактор текста службы поддержки. Исправь орфографические, грамматические и "
+    "пунктуационные ошибки, сохранив исходный смысл и тон сообщения. Верни только "
+    "исправленный текст без дополнительных комментариев."
+)
 
 
 class RateLimiter:
@@ -120,7 +130,20 @@ def _make_snippet(text: str, max_len: int = 280) -> str:
     snippet = (text or "").strip().replace("\n", " ")
     if len(snippet) <= max_len:
         return snippet
-    return snippet[: max_len - 1].rstrip() + "…"
+    return snippet[: max_len - 1].rstrip() + "..."
+
+
+def _message_content_to_text(message: object) -> str:
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, Iterable):
+        parts: list[str] = []
+        for part in content:
+            if getattr(part, "type", "") == "text":
+                parts.append(getattr(part, "text", ""))
+        return "".join(parts).strip()
+    return ""
 
 
 def handle_search(
@@ -155,11 +178,20 @@ def handle_search(
         for item in raw_results
     ]
 
+    initial_count = len(results)
+    top_result = results[0] if results else None
+    below_threshold = top_result is None or top_result.score < SEARCH_SCORE_THRESHOLD
+    if below_threshold:
+        results = []
+
     payload = {
         "query_length": len(request.query),
         "result_count": len(results),
-        "top_id": results[0].id if results else None,
-        "top_score": results[0].score if results else None,
+        "initial_result_count": initial_count,
+        "top_id": top_result.id if top_result else None,
+        "top_score": top_result.score if top_result else None,
+        "score_threshold": SEARCH_SCORE_THRESHOLD,
+        "below_threshold": below_threshold,
         "products": products,
     }
     log_event(
@@ -172,6 +204,44 @@ def handle_search(
     )
 
     return SearchResponse(results=results, latency_ms=round(latency_ms, 2))
+
+
+def handle_spell_check(
+    request: SpellCheckRequest,
+    *,
+    client_ip: Optional[str],
+    user_agent: Optional[str],
+) -> SpellCheckResponse:
+    perform_warmup()
+    _ensure_size_limit(request.text)
+    rate_key = _derive_rate_key(request.session_id, client_ip)
+    _assert_rate_limit(rate_key)
+
+    started = time.perf_counter()
+    client = get_scibox_client()
+    message = client.chat(
+        [
+            {"role": "system", "content": SPELLCHECK_SYSTEM_PROMPT},
+            {"role": "user", "content": request.text},
+        ],
+        temperature=0.0,
+    )
+    corrected = _message_content_to_text(message) or request.text
+    latency_ms = (time.perf_counter() - started) * 1000
+
+    log_event(
+        "spellcheck",
+        session_id=request.session_id,
+        user_agent=user_agent,
+        latency_ms=latency_ms,
+        payload={
+            "char_count": len(request.text),
+            "has_changes": corrected != request.text,
+        },
+        extra={"ip": client_ip} if client_ip else None,
+    )
+
+    return SpellCheckResponse(corrected=corrected)
 
 
 def handle_classify(
@@ -188,6 +258,19 @@ def handle_classify(
     started = time.perf_counter()
     classification = classify_and_ner(request.text)
     latency_ms = (time.perf_counter() - started) * 1000
+    matched_score = float(
+        classification.get("matched_template_score")
+        or classification.get("confidence")
+        or 0.0
+    )
+    below_threshold = matched_score < SEARCH_SCORE_THRESHOLD
+    classification["below_threshold"] = below_threshold
+    if below_threshold:
+        classification["category"] = None
+        classification["subcategory"] = None
+        classification["confidence"] = 0.0
+        classification["category_confidence"] = 0.0
+        classification["subcategory_confidence"] = 0.0
 
     label_parts = [
         part
@@ -208,6 +291,7 @@ def handle_classify(
         payload={
             "label": label,
             "confidence": confidence,
+            "below_threshold": below_threshold,
         },
         extra={"ip": client_ip} if client_ip else None,
     )

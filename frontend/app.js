@@ -3,6 +3,8 @@ const API = (path) => `${location.origin.replace(/:\d+$/, ":8000")}${path}`;
 const sessionKey = "smart-support-session";
 const themeKey = "smart-support-theme";
 
+const SCORE_THRESHOLD = 0.5;
+
 const state = {
   lastQuery: "",
   lastResults: [],
@@ -63,6 +65,15 @@ export async function search(query, topK = 5) {
 
 export async function classify(text) {
   const res = await fetch(API("/api/classify"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, session_id: sessionId }),
+  });
+  return handleResponse(res);
+}
+
+export async function spellCheckTemplate(text) {
+  const res = await fetch(API("/api/spellcheck"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, session_id: sessionId }),
@@ -289,7 +300,8 @@ function renderResults(items) {
   if (!items.length) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
-    empty.innerHTML = `<div class="question-title">Ничего не найдено</div>`;
+    const thresholdText = SCORE_THRESHOLD.toFixed(1);
+    empty.innerHTML = `<div class="question-title">Подходящего ответа нет (score &lt; ${thresholdText}).</div>`;
     root.appendChild(empty);
     return;
   }
@@ -458,10 +470,17 @@ async function handleClassificationVote(target, correct) {
 }
 
 function updateClassification(raw) {
-  state.lastClassification = raw
+  const normalized = raw ? { ...raw } : null;
+  if (normalized?.below_threshold) {
+    normalized.category = null;
+    normalized.subcategory = null;
+  }
+
+  state.lastClassification = normalized
     ? {
-        category: raw?.category || null,
-        subcategory: raw?.subcategory || null,
+        category: normalized?.category || null,
+        subcategory: normalized?.subcategory || null,
+        belowThreshold: Boolean(normalized?.below_threshold),
       }
     : null;
   state.classificationVotes = { main: null, sub: null };
@@ -470,32 +489,34 @@ function updateClassification(raw) {
   const mainNode = document.querySelector("#mainCategory");
   const subNode = document.querySelector("#subCategory");
 
+  const belowThreshold = Boolean(normalized?.below_threshold);
+
   if (mainNode) {
-    if (raw?.category) {
-      const percent = raw.category_confidence
-        ? `${Math.round(raw.category_confidence * 100)}%`
+    if (normalized?.category && !belowThreshold) {
+      const percent = normalized.category_confidence
+        ? `${Math.round(normalized.category_confidence * 100)}%`
         : "";
       mainNode.textContent = percent
-        ? `${raw.category} (${percent})`
-        : raw.category;
+        ? `${normalized.category} (${percent})`
+        : normalized.category;
       mainNode.classList.add("determined");
     } else {
-      mainNode.textContent = "Не определено";
+      mainNode.textContent = "Неизвестно";
       mainNode.classList.remove("determined");
     }
   }
 
   if (subNode) {
-    if (raw?.subcategory) {
-      const percent = raw.subcategory_confidence
-        ? `${Math.round(raw.subcategory_confidence * 100)}%`
+    if (normalized?.subcategory && !belowThreshold) {
+      const percent = normalized.subcategory_confidence
+        ? `${Math.round(normalized.subcategory_confidence * 100)}%`
         : "";
       subNode.textContent = percent
-        ? `${raw.subcategory} (${percent})`
-        : raw.subcategory;
+        ? `${normalized.subcategory} (${percent})`
+        : normalized.subcategory;
       subNode.classList.add("determined");
     } else {
-      subNode.textContent = "Не определено";
+      subNode.textContent = "Неизвестно";
       subNode.classList.remove("determined");
     }
   }
@@ -575,6 +596,12 @@ async function runWorkflow() {
     const primaryId = state.lastResults[0]?.id ?? null;
     setSelectedResult(primaryId, { rerender: false });
     renderResults(state.lastResults);
+    if (!state.lastResults.length) {
+      showBanner(
+        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(1)}).`,
+        "info"
+      );
+    }
     updateClassification(classifyResult.raw);
 
     refreshStats();
@@ -674,6 +701,42 @@ function bindEvents() {
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         runWorkflow();
+      }
+    });
+  }
+
+  const spellButton = document.querySelector("#spellCheck");
+  if (spellButton) {
+    spellButton.addEventListener("click", async () => {
+      const template = document.querySelector("#responseTemplate");
+      const currentText = template?.value ?? "";
+      if (!currentText.trim()) {
+        showBanner("Шаблонный ответ пуст — нечего исправлять.", "warning");
+        return;
+      }
+
+      spellButton.disabled = true;
+      const originalLabel = spellButton.textContent;
+      spellButton.textContent = "Исправление...";
+
+      try {
+        const response = await spellCheckTemplate(currentText);
+        const corrected = typeof response.corrected === "string" ? response.corrected : currentText;
+        if (template) {
+          template.value = corrected || currentText;
+        }
+        if (state.templateVote !== null) {
+          state.templateVote = null;
+          updateTemplateControls();
+        }
+        showBanner("Орфография в шаблоне обновлена.", "success");
+      } catch (err) {
+        showBanner(err.message || "Не удалось исправить текст шаблона.");
+      } finally {
+        spellButton.disabled = false;
+        if (typeof originalLabel === "string") {
+          spellButton.textContent = originalLabel;
+        }
       }
     });
   }
