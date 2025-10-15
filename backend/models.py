@@ -209,3 +209,50 @@ class StatsSummary(BaseModel):
 class IndexRebuildResponse(BaseModel):
     ok: bool
     records: int
+
+
+class ChatMessageRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100_000)
+    sender: Literal["client", "support"] = Field("client")
+    category: Optional[str] = Field(None, max_length=128)
+    subcategory: Optional[str] = Field(None, max_length=128)
+    template_id: Optional[int] = None
+    template_answer: Optional[str] = Field(None, max_length=100_000)
+    session_id: Optional[str] = Field(None, max_length=128)
+
+    @validator("text", "category", "subcategory", "template_answer", pre=True)
+    def _trim_optional(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        return value
+
+
+class ChatMessagePayload(BaseModel):
+    id: int
+    sender: Literal["client", "support"]
+    text: str
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    template_answer: Optional[str] = None
+    timestamp: datetime
+
+
+class ChatSuggestionPayload(BaseModel):
+    template_id: Optional[int] = None
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class ChatMessageResponse(BaseModel):
+    messages: List[ChatMessagePayload] = Field(default_factory=list)
+    suggestion: Optional[ChatSuggestionPayload] = None
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: List[ChatMessagePayload] = Field(default_factory=list)

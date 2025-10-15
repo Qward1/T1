@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     scibox_base_url: str = Field(..., alias="SCIBOX_BASE_URL")
 
     faq_path: Optional[Path] = Field(None, alias="FAQ_PATH")
+    chat_db_path: Optional[Path] = Field(None, alias="CHAT_DB_PATH")
 
     admin_token: Optional[str] = Field(None, alias="ADMIN_TOKEN")
     frontend_origins_raw: Optional[str] = Field(None, alias="FRONTEND_ORIGINS")
@@ -44,6 +45,13 @@ class Settings(BaseSettings):
     def frontend_origins(self) -> Tuple[str, ...]:
         origins = _split_csv(self.frontend_origins_raw)
         return origins if origins else ("*",)
+
+    @property
+    def chat_database_path(self) -> Path:
+        if self.chat_db_path:
+            return self.chat_db_path.expanduser().resolve()
+        default_dir = Path(__file__).resolve().parent.parent / "data"
+        return default_dir / "chat.db"
 
 
 @lru_cache

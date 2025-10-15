@@ -5,15 +5,26 @@ import logging
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock
 from typing import Deque, Dict, Optional
 
 from fastapi import HTTPException, status
 
+from ..chat_storage import (
+    ChatMessage,
+    delete_all_messages,
+    init_chat_storage,
+    list_messages,
+    persist_messages,
+)
 from ..classifiers import classify_and_ner, detect_products
 from ..models import (
     ActionResponse,
+    ChatHistoryResponse,
+    ChatMessagePayload,
+    ChatMessageRequest,
+    ChatMessageResponse,
+    ChatSuggestionPayload,
     ClassifyRequest,
     ClassifyResponse,
     ClassificationVoteRequest,
@@ -27,7 +38,7 @@ from ..models import (
     TemplateVoteRequest,
 )
 from ..recommenders import preload_embeddings, semantic_search
-from ..repository import fetch_categories
+from ..repository import fetch_categories, fetch_records_by_ids
 from ..scibox_client import get_scibox_client
 from ..settings import get_settings
 from ..storage import (
@@ -44,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 init_storage()
+init_chat_storage()
 
 
 class RateLimiter:
@@ -121,6 +133,28 @@ def _make_snippet(text: str, max_len: int = 280) -> str:
     if len(snippet) <= max_len:
         return snippet
     return snippet[: max_len - 1].rstrip() + "…"
+
+
+def _normalize_sender(value: Optional[str]) -> str:
+    if value == "bot":
+        return "support"
+    if value == "support":
+        return "support"
+    if value == "client" or value == "user":
+        return "client"
+    return "client"
+
+
+def _message_to_payload(message: ChatMessage) -> ChatMessagePayload:
+    return ChatMessagePayload(
+        id=message.id,
+        sender=_normalize_sender(message.sender),
+        text=message.text,
+        category=message.category,
+        subcategory=message.subcategory,
+        template_answer=message.template_answer,
+        timestamp=message.timestamp,
+    )
 
 
 def handle_search(
@@ -213,6 +247,137 @@ def handle_classify(
     )
 
     return ClassifyResponse(label=label, confidence=confidence, raw=classification)
+
+
+def handle_chat_message(
+    request: ChatMessageRequest,
+    *,
+    client_ip: Optional[str],
+    user_agent: Optional[str],
+) -> ChatMessageResponse:
+    text = (request.text or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Text must not be empty.",
+        )
+
+    _ensure_size_limit(text)
+    if request.template_answer:
+        _ensure_size_limit(request.template_answer)
+
+    rate_key = _derive_rate_key(request.session_id, client_ip)
+    _assert_rate_limit(rate_key)
+
+    sender = (request.sender or "client").strip().lower()
+    timestamp = datetime.now(timezone.utc)
+    saved_messages: list[ChatMessage] = []
+    suggestion: Optional[ChatSuggestionPayload] = None
+
+    if sender == "client":
+        perform_warmup()
+        started = time.perf_counter()
+        classification = classify_and_ner(text)
+        latency_ms = (time.perf_counter() - started) * 1000
+
+        template_id = classification.get("matched_template_id")
+        answer_record = None
+        if template_id:
+            try:
+                answer_record = fetch_records_by_ids([int(template_id)]).get(int(template_id))
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("Failed to fetch template %s: %s", template_id, exc)
+
+        fallback_answer = (
+            "Извините, я пока не нашёл подходящего ответа. Пожалуйста, уточните запрос."
+        )
+        category = (answer_record or {}).get("category") or classification.get("category")
+        subcategory = (answer_record or {}).get("subcategory") or classification.get("subcategory")
+        suggested_answer = (
+            (answer_record or {}).get("answer")
+            or request.template_answer
+            or fallback_answer
+        )
+
+        client_message = ChatMessage(
+            sender="client",
+            text=text,
+            category=category,
+            subcategory=subcategory,
+            template_answer=None,
+            timestamp=timestamp,
+        )
+        saved_messages = persist_messages([client_message])
+
+        log_event(
+            "chat",
+            session_id=request.session_id,
+            user_agent=user_agent,
+            latency_ms=latency_ms,
+            payload={
+                "sender": "client",
+                "category": category,
+                "subcategory": subcategory,
+                "template_id": template_id,
+                "confidence": float(classification.get("confidence", 0.0) or 0.0),
+            },
+            extra={"ip": client_ip} if client_ip else None,
+        )
+
+        logger.info(
+            "Client message recorded category=%s subcategory=%s template_id=%s confidence=%.3f",
+            category,
+            subcategory,
+            template_id,
+            float(classification.get("confidence", 0.0) or 0.0),
+        )
+    elif sender == "support":
+        support_message = ChatMessage(
+            sender="support",
+            text=text,
+            category=request.category,
+            subcategory=request.subcategory,
+            template_answer=request.template_answer or text,
+            timestamp=timestamp,
+        )
+        saved_messages = persist_messages([support_message])
+
+        log_event(
+            "chat",
+            session_id=request.session_id,
+            user_agent=user_agent,
+            payload={
+                "sender": "support",
+                "category": request.category,
+                "subcategory": request.subcategory,
+            },
+            extra={"ip": client_ip} if client_ip else None,
+        )
+
+        logger.info(
+            "Support reply stored category=%s subcategory=%s",
+            request.category,
+            request.subcategory,
+        )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported sender.",
+        )
+
+    payload_messages = [_message_to_payload(message) for message in saved_messages]
+    return ChatMessageResponse(messages=payload_messages, suggestion=suggestion)
+
+
+def handle_chat_history() -> ChatHistoryResponse:
+    messages = [_message_to_payload(item) for item in list_messages()]
+    return ChatHistoryResponse(messages=messages)
+
+
+def handle_chat_clear() -> ActionResponse:
+    delete_all_messages()
+    logger.info("Chat history cleared by operator.")
+    return ActionResponse()
 
 
 def handle_feedback(

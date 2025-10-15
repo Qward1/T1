@@ -13,6 +13,8 @@ const state = {
   lastTopItemId: null,
   isLoading: false,
   chatHistory: [],
+  activeChatMessageId: null,
+  chatHistorySignature: "",
 };
 
 const sessionId = loadSessionId();
@@ -111,6 +113,20 @@ async function postResponseLog(body) {
   return handleResponse(res);
 }
 
+export async function postChatMessage(payload) {
+  const res = await fetch(API("/api/message"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, session_id: sessionId }),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchChatHistory() {
+  const res = await fetch(API("/api/messages"));
+  return handleResponse(res);
+}
+
 function escapeHTML(value) {
   return (value ?? "")
     .toString()
@@ -167,70 +183,269 @@ function formatDateTime(value) {
 }
 
 function renderChatHistory(entries) {
+
   const root = document.querySelector("#chatHistory");
+
   if (!root) return;
 
   const list = Array.isArray(entries) ? entries : [];
+
   state.chatHistory = list;
+
+  state.chatHistorySignature = JSON.stringify(list);
+
   root.innerHTML = "";
 
   if (!list.length) {
+
+    const empty = document.createElement("div");
+
+    empty.className = "chat-empty";
+
+    empty.textContent = "История пуста. Ожидаем сообщения клиента.";
+
+    root.appendChild(empty);
+
     return;
+
   }
 
-  const ordered = [...list].reverse();
-  ordered.forEach((entry) => {
-    const timestamp = formatDateTime(entry.timestamp);
-    const classification = [entry.category, entry.subcategory]
-      .filter(Boolean)
-      .join(" / ");
-    const baseMeta = [timestamp, classification].filter(Boolean).join(" • ");
+  list.forEach((entry) => {
 
-    const clientHeader = ["Клиент", baseMeta].filter(Boolean).join(" • ");
-    const clientMessage = document.createElement("div");
-    clientMessage.className = "chat-message client";
-    clientMessage.innerHTML = `
-      <div class="message-header">${escapeHTML(clientHeader)}</div>
-      <div class="message-text">${formatSnippet(entry.query || "")}</div>
-    `;
-    root.appendChild(clientMessage);
+    const isClient = entry.sender === "client" || entry.sender === "user";
 
-    if (entry.template_text) {
-      const statusParts = [];
-      if (entry.main_vote !== null && entry.main_vote !== undefined) {
-        statusParts.push(
-          `Категория: ${entry.main_vote ? "верно" : "ошибка"}`
-        );
-      }
-      if (entry.sub_vote !== null && entry.sub_vote !== undefined) {
-        statusParts.push(
-          `Подкатегория: ${entry.sub_vote ? "верно" : "ошибка"}`
-        );
-      }
-      if (
-        entry.template_positive !== null &&
-        entry.template_positive !== undefined
-      ) {
-        statusParts.push(
-          entry.template_positive ? "Шаблон одобрен" : "Шаблон отклонен"
-        );
-      }
-      const operatorHeader = ["Оператор", baseMeta, statusParts.join(" • ")]
-        .filter(Boolean)
-        .join(" • ");
-      const operatorMessage = document.createElement("div");
-      operatorMessage.className = "chat-message operator";
-      operatorMessage.innerHTML = `
-        <div class="message-header">${escapeHTML(operatorHeader)}</div>
-        <div class="message-text">${formatSnippet(
-          entry.template_text || ""
-        )}</div>
-      `;
-      root.appendChild(operatorMessage);
+    const roleClass = isClient ? "client" : "operator";
+
+    const message = document.createElement("div");
+
+    message.className = `chat-message ${roleClass}`;
+
+    message.dataset.messageId = String(entry.id);
+
+    if (entry.id === state.activeChatMessageId) {
+
+      message.classList.add("active");
+
     }
+
+    if (isClient) {
+
+      message.classList.add("clickable");
+
+      message.addEventListener("click", () => setActiveChatMessage(entry.id));
+
+    }
+
+    const header = document.createElement("div");
+
+    header.className = "message-header";
+
+    const author = isClient ? "Клиент" : "Поддержка";
+
+    const metaParts = [author, formatDateTime(entry.timestamp)].filter(Boolean);
+
+    header.textContent = metaParts.join(" • " );
+
+    message.appendChild(header);
+
+    const body = document.createElement("div");
+
+    body.className = "message-text";
+
+    body.innerHTML = formatSnippet(entry.text || "");
+
+    message.appendChild(body);
+
+    const details = [entry.category, entry.subcategory]
+
+      .filter(Boolean)
+
+      .join(" / " );
+
+    if (details) {
+
+      const meta = document.createElement("div");
+
+      meta.className = "message-meta";
+
+      meta.textContent = details;
+
+      message.appendChild(meta);
+
+    }
+
+    root.appendChild(message);
+
   });
 
   root.scrollTop = root.scrollHeight;
+
+}
+
+function findLatestClientMessage(messages = state.chatHistory) {
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+
+    const entry = messages[i];
+
+    if (entry.sender === "client" || entry.sender === "user") {
+
+      return entry;
+
+    }
+
+  }
+
+  return null;
+
+}
+
+function highlightActiveChatMessage() {
+
+  const nodes = document.querySelectorAll("#chatHistory .chat-message");
+
+  nodes.forEach((node) => {
+
+    const id = Number(node.dataset.messageId);
+
+    node.classList.toggle("active", id === state.activeChatMessageId);
+
+  });
+
+}
+
+function setActiveChatMessage(messageId, { autoProcess = false } = {}) {
+
+  const target = state.chatHistory.find((entry) =>
+
+    entry.id === messageId && (entry.sender === "client" || entry.sender === "user")
+
+  );
+
+  if (!target) {
+
+    return;
+
+  }
+
+  state.activeChatMessageId = target.id;
+
+  state.lastQuery = target.text || "";
+
+  highlightActiveChatMessage();
+
+  const template = document.querySelector("#responseTemplate");
+
+  if (template && (autoProcess || !template.value)) {
+
+    template.value = target.template_answer || "";
+
+  }
+
+  updateClassification({
+
+    category: target.category || null,
+
+    subcategory: target.subcategory || null,
+
+    category_confidence: null,
+
+    subcategory_confidence: null,
+
+  });
+
+  renderResults([]);
+
+  if (autoProcess && target.text) {
+
+    runWorkflow({ text: target.text, silent: true });
+
+  }
+
+}
+
+function getActiveClientMessage() {
+
+  if (!state.chatHistory.length) {
+
+    return null;
+
+  }
+
+  if (state.activeChatMessageId) {
+
+    const selected = state.chatHistory.find((entry) =>
+
+      entry.id === state.activeChatMessageId &&
+
+      (entry.sender === "client" || entry.sender === "user")
+
+    );
+
+    if (selected) {
+
+      return selected;
+
+    }
+
+  }
+
+  return findLatestClientMessage(state.chatHistory);
+
+}
+
+async function refreshChatHistory({ silent = false } = {}) {
+
+  try {
+
+    const data = await fetchChatHistory();
+
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+
+    const serialized = JSON.stringify(messages);
+
+    const changed = serialized !== state.chatHistorySignature;
+
+    if (changed) {
+
+      renderChatHistory(messages);
+
+    } else {
+
+      state.chatHistory = messages;
+
+      highlightActiveChatMessage();
+
+    }
+
+    const latestClient = findLatestClientMessage(messages);
+
+    if (latestClient) {
+
+      if (!state.activeChatMessageId || changed) {
+
+        setActiveChatMessage(latestClient.id, { autoProcess: changed });
+
+      }
+
+    } else {
+
+      state.activeChatMessageId = null;
+
+      highlightActiveChatMessage();
+
+    }
+
+  } catch (err) {
+
+    if (!silent) {
+
+      console.warn("Не удалось получить чат:", err);
+
+    }
+
+  }
+
 }
 
 function setChoiceButtonState(
@@ -503,7 +718,7 @@ function updateClassification(raw) {
 
 function applyStats(summary) {
   if (!summary) return;
-  const { search, classify, feedback, history } = summary;
+  const { search, classify, feedback } = summary;
 
   const totalRequests = document.querySelector("#totalRequests");
   if (totalRequests) totalRequests.textContent = `${search.total}`;
@@ -550,40 +765,88 @@ async function refreshStats() {
   }
 }
 
-async function runWorkflow() {
+async function runWorkflow({ text, silent = false } = {}) {
+
   if (state.isLoading) return;
 
-  const textarea = document.querySelector("#clientRequest");
-  const query = textarea?.value?.trim() ?? "";
+  const source = text ?? state.lastQuery ?? "";
+
+  const query = source.trim();
+
   if (!query) {
-    showBanner("Введите текст запроса.");
+
+    if (!silent) {
+
+      showBanner("Нет сообщения клиента.");
+
+    }
+
     return;
+
   }
 
+  state.lastQuery = query;
+
   state.isLoading = true;
-  toggleLoading(true);
-  showBanner("");
+
+  if (!silent) {
+
+    toggleLoading(true);
+
+    showBanner("");
+
+  }
 
   try {
-    state.lastQuery = query;
+
     const [searchResult, classifyResult] = await Promise.all([
+
       search(query),
+
       classify(query),
+
     ]);
 
     state.lastResults = searchResult.results ?? [];
+
     const primaryId = state.lastResults[0]?.id ?? null;
+
     setSelectedResult(primaryId, { rerender: false });
+
     renderResults(state.lastResults);
+
     updateClassification(classifyResult.raw);
 
-    refreshStats();
+    if (!silent) {
+
+      refreshStats();
+
+    }
+
   } catch (err) {
-    showBanner(err.message || "Произошла ошибка при обращении к API.");
+
+    if (!silent) {
+
+      showBanner(err.message || "Произошла ошибка при обращении к API.");
+
+    } else {
+
+      console.warn('Автообработка не удалась:', err);
+
+    }
+
   } finally {
+
     state.isLoading = false;
-    toggleLoading(false);
+
+    if (!silent) {
+
+      toggleLoading(false);
+
+    }
+
   }
+
 }
 
 function bindTemplateButtons() {
@@ -663,80 +926,119 @@ function bindThemeToggle() {
 }
 
 function bindEvents() {
-  const button = document.querySelector("#processRequest");
-  if (button) {
-    button.addEventListener("click", runWorkflow);
+
+  const processButton = document.querySelector("#processRequest");
+
+  if (processButton) {
+
+    processButton.addEventListener("click", () => {
+
+      const target = getActiveClientMessage();
+
+      runWorkflow({ text: target?.text ?? "" });
+
+    });
+
   }
 
-  const textarea = document.querySelector("#clientRequest");
-  if (textarea) {
-    textarea.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        runWorkflow();
-      }
-    });
+  const refreshButton = document.querySelector("#chatRefresh");
+
+  if (refreshButton) {
+
+    refreshButton.addEventListener("click", () => refreshChatHistory());
+
   }
 
   const sendButton = document.querySelector("#sendResponse");
+
   if (sendButton) {
+
     sendButton.addEventListener("click", async () => {
+
       const template = document.querySelector("#responseTemplate");
-      const responseText = template?.value ?? "";
-      if (!responseText.trim()) {
-        showBanner("Нет ответа для отправки.");
+
+      const responseText = template?.value?.trim() ?? "";
+
+      if (!responseText) {
+
+        showBanner("Нет текста ответа.");
+
         return;
+
       }
 
-      const selected = getSelectedResult();
-      if (state.lastQuery) {
-        try {
+      const target = getActiveClientMessage();
+
+      if (!target) {
+
+        showBanner("Нет сообщения клиента для ответа.");
+
+        return;
+
+      }
+
+      try {
+
+        const selected = getSelectedResult();
+
+        await postChatMessage({
+
+          sender: "support",
+
+          text: responseText,
+
+          category: state.lastClassification?.category ?? target.category ?? null,
+
+          subcategory: state.lastClassification?.subcategory ?? target.subcategory ?? null,
+
+          template_id: selected ? selected.id : null,
+
+          template_answer: responseText,
+
+        });
+
+        if (state.lastQuery) {
+
           await postResponseLog({
+
             query: state.lastQuery,
+
             category: state.lastClassification?.category ?? null,
+
             subcategory: state.lastClassification?.subcategory ?? null,
+
             main_vote: state.classificationVotes.main,
+
             sub_vote: state.classificationVotes.sub,
+
             template_text: responseText,
+
             template_positive: state.templateVote,
+
             top_item_id: selected ? selected.id : null,
+
           });
-          await refreshStats();
-        } catch (err) {
-          console.warn("Не удалось сохранить историю ответа:", err);
+
         }
+
+        await refreshChatHistory({ silent: true });
+
+        refreshStats();
+
+        showBanner("Ответ отправлен клиенту.", "success");
+
+      } catch (err) {
+
+        console.error("Не удалось отправить ответ:", err);
+
+        showBanner("Не удалось отправить ответ.");
+
       }
 
-      let copySuccess = false;
-
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(responseText);
-          copySuccess = true;
-        } catch (err) {
-          console.warn("Clipboard API недоступен:", err);
-        }
-      }
-
-      if (!copySuccess && template?.select) {
-        template.focus();
-        template.select();
-        try {
-          copySuccess = document.execCommand("copy");
-        } catch (err) {
-          console.warn("document.execCommand('copy') не сработал:", err);
-          copySuccess = false;
-        }
-        window.getSelection()?.removeAllRanges?.();
-      }
-
-      if (copySuccess) {
-        showBanner("Ответ скопирован в буфер обмена.", "success");
-      } else {
-        showBanner("Скопируйте ответ вручную (Ctrl+C).", "warning");
-      }
     });
+
   }
+
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -747,5 +1049,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTemplateControls();
   updateClassificationControls();
   refreshStats();
+  refreshChatHistory();
   setInterval(refreshStats, 60_000);
+  setInterval(() => refreshChatHistory({ silent: true }), 5_000);
 });

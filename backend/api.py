@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import classify, feedback, index, quality, search, stats
+from .routers import chat, classify, feedback, index, quality, search, stats
 from .services.logic import perform_warmup
 from .settings import get_settings
 
@@ -25,6 +25,7 @@ app.include_router(feedback.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
 app.include_router(quality.router, prefix="/api")
 app.include_router(index.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
 
 
 @app.get("/health")

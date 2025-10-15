@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Диалог с поддержкой</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
+    <style>
+        :root {
+            --bg: #f4f6fb;
+            --card-bg: #ffffff;
+            --primary: #1877f2;
+            --primary-dark: #145fcb;
+            --border: #dde3f0;
+            --text-primary: #1f2230;
+            --text-muted: #6b7280;
+            --user-bg: linear-gradient(135deg, #1877f2, #1b4de2);
+            --bot-bg: #f0f4ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 12px;
+        }
+
+        main {
+            width: min(720px, 100%);
+            background: var(--card-bg);
+            border-radius: 18px;
+            box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        #messages {
+            flex: 1;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow-y: auto;
+            background: linear-gradient(180deg, rgba(24, 119, 242, 0.02), rgba(24, 119, 242, 0));
+        }
+
+        .bubble {
+            max-width: 80%;
+            padding: 14px 16px;
+            border-radius: 16px;
+            line-height: 1.45;
+            font-size: 15px;
+            position: relative;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            white-space: pre-wrap;
+        }
+
+        .bubble.user {
+            align-self: flex-end;
+            color: #fff;
+            background: var(--user-bg);
+            border-bottom-right-radius: 6px;
+        }
+
+        .bubble.bot {
+            align-self: flex-start;
+            background: var(--bot-bg);
+            border-bottom-left-radius: 6px;
+        }
+
+        .meta {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        form {
+            border-top: 1px solid var(--border);
+            padding: 20px 24px;
+            display: flex;
+            gap: 12px;
+        }
+
+        textarea {
+            flex: 1;
+            resize: none;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-family: inherit;
+            font-size: 15px;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+            min-height: 54px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: rgba(24, 119, 242, 0.7);
+            box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.15);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            padding: 0 24px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+            min-width: 120px;
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #status {
+            padding: 12px 24px;
+            border-top: 1px solid var(--border);
+            font-size: 13px;
+            color: var(--text-muted);
+            background: rgba(24, 119, 242, 0.04);
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <h1>Поддержка</h1>
+            <p>Задайте вопрос — мы найдём ответ автоматически</p>
+        </header>
+
+        <section id="messages" aria-live="polite">
+            <div class="bubble bot">
+                Здравствуйте! Чем могу помочь?
+                <div class="meta">
+                    <span>Система</span>
+                </div>
+            </div>
+        </section>
+
+        <form id="message-form" autocomplete="off">
+            <textarea
+                id="message-input"
+                placeholder="Опишите ваш вопрос"
+                required
+                minlength="1"
+            ></textarea>
+            <button type="submit" id="send-button">Отправить</button>
+        </form>
+
+        <div id="status">История синхронизируется…</div>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>

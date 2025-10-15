@@ -254,7 +254,15 @@
             gap: var(--space-16);
         }
 
-        .panel-section {
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-8);
+            margin-bottom: var(--space-12);
+        }
+
+.panel-section {
             background: var(--color-surface);
             border: 1px solid var(--color-border);
             border-radius: var(--radius-lg);
@@ -516,6 +524,36 @@
             flex-direction: column;
             gap: var(--space-8);
         }
+        .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-16);
+            height: 100%;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-8);
+            margin-bottom: var(--space-12);
+        }
+
+        .chat-hint {
+            margin-top: var(--space-12);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .chat-message.clickable {
+            cursor: pointer;
+        }
+
+        .chat-message.active {
+            outline: 2px solid rgba(var(--color-primary-rgb), 0.25);
+            box-shadow: var(--shadow-sm);
+        }
+
         
         .chat-history:empty::before {
             content: 'История чата пуста';
@@ -780,32 +818,28 @@
                 <div class="request-layout">
                     <!-- Left Panel -->
                     <div class="left-panel">
-                        <div class="panel-section">
-                            <h2 class="section-title">Запрос клиента</h2>
-                            <div class="form-group">
-                                <textarea 
-                                    id="clientRequest" 
-                                    class="form-control large" 
-                                ></textarea>
+                        <div class="panel-section chat-wrapper">
+                            <div class="chat-header">
+                                <h2 class="section-title">Чат с клиентом</h2>
+                                <button class="btn btn-secondary" id="chatRefresh">Обновить</button>
                             </div>
-                            <button class="btn btn-primary" id="processRequest">Обработать запрос</button>
-                        </div>
-
-                        <!-- Chat History -->
-                        <div class="panel-section" style="flex: 0 0 40%; display: flex; flex-direction: column;">
-                            <h2 class="section-title">История чата</h2>
                             <div id="chatHistory" class="chat-history">
-                                <!-- История чата будет заполняться динамически -->
+                                <!-- История сообщений появится здесь -->
                             </div>
+                            <p class="chat-hint">Выберите сообщение клиента слева, чтобы подготовить ответ.</p>
                         </div>
                     </div>
 
                     <!-- Right Panel -->
+<!-- Right Panel -->
                     <div class="right-panel">
                         <!-- Classification -->
                         <div class="panel-section" id="classify">
-                            <h3 class="section-title">Классификация вопроса</h3>
-                            <div class="form-group">
+                            <div class="panel-header">
+                                <h3 class="section-title">Классификация запроса</h3>
+                                <button class="btn btn-secondary" id="processRequest">Классифицировать</button>
+                            </div>
+<div class="form-group">
                                 <label class="form-label">Основная категория:</label>
                                 <div class="classification-row">
                                     <div id="mainCategory" class="classification-display">Не определено</div>
