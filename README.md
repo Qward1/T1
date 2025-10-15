@@ -70,7 +70,7 @@ If `make` is unavailable in PowerShell, bring everything up with:
 python dev.py
 ```
 
-This starts the API at http://127.0.0.1:8000 and serves the static frontend at http://127.0.0.1:3000/index_clean.html.
+This starts the API at http://127.0.0.1:8000, the операторский интерфейс at http://127.0.0.1:3000/index_clean.html, and the клиентский чат at http://127.0.0.1:3001.
 
 To run only the API:
 

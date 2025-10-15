@@ -15,6 +15,10 @@ const state = {
   lastTopItemId: null,
   isLoading: false,
   chatHistory: [],
+  activeChatMessageId: null,
+  chatHistorySignature: "",
+  activeChatLocked: false,
+  chatNodes: new Map(),
 };
 
 const sessionId = loadSessionId();
@@ -122,6 +126,20 @@ async function postResponseLog(body) {
   return handleResponse(res);
 }
 
+export async function postChatMessage(payload) {
+  const res = await fetch(API("/api/message"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, session_id: sessionId }),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchChatHistory() {
+  const res = await fetch(API("/api/messages"));
+  return handleResponse(res);
+}
+
 function escapeHTML(value) {
   return (value ?? "")
     .toString()
@@ -178,70 +196,398 @@ function formatDateTime(value) {
 }
 
 function renderChatHistory(entries) {
+
   const root = document.querySelector("#chatHistory");
+
   if (!root) return;
 
   const list = Array.isArray(entries) ? entries : [];
+
   state.chatHistory = list;
-  root.innerHTML = "";
+
+  state.chatHistorySignature = JSON.stringify(list);
 
   if (!list.length) {
+
+    state.chatNodes = new Map();
+
+    root.innerHTML = "";
+
+    const empty = document.createElement("div");
+
+    empty.className = "chat-empty";
+
+    empty.textContent = "История пуста. Ожидаем сообщения клиента.";
+
+    root.appendChild(empty);
+
     return;
+
   }
 
-  const ordered = [...list].reverse();
-  ordered.forEach((entry) => {
-    const timestamp = formatDateTime(entry.timestamp);
-    const classification = [entry.category, entry.subcategory]
-      .filter(Boolean)
-      .join(" / ");
-    const baseMeta = [timestamp, classification].filter(Boolean).join(" • ");
+  if (!(state.chatNodes instanceof Map)) {
 
-    const clientHeader = ["Клиент", baseMeta].filter(Boolean).join(" • ");
-    const clientMessage = document.createElement("div");
-    clientMessage.className = "chat-message client";
-    clientMessage.innerHTML = `
-      <div class="message-header">${escapeHTML(clientHeader)}</div>
-      <div class="message-text">${formatSnippet(entry.query || "")}</div>
-    `;
-    root.appendChild(clientMessage);
+    state.chatNodes = new Map();
 
-    if (entry.template_text) {
-      const statusParts = [];
-      if (entry.main_vote !== null && entry.main_vote !== undefined) {
-        statusParts.push(
-          `Категория: ${entry.main_vote ? "верно" : "ошибка"}`
-        );
-      }
-      if (entry.sub_vote !== null && entry.sub_vote !== undefined) {
-        statusParts.push(
-          `Подкатегория: ${entry.sub_vote ? "верно" : "ошибка"}`
-        );
-      }
-      if (
-        entry.template_positive !== null &&
-        entry.template_positive !== undefined
-      ) {
-        statusParts.push(
-          entry.template_positive ? "Шаблон одобрен" : "Шаблон отклонен"
-        );
-      }
-      const operatorHeader = ["Оператор", baseMeta, statusParts.join(" • ")]
-        .filter(Boolean)
-        .join(" • ");
-      const operatorMessage = document.createElement("div");
-      operatorMessage.className = "chat-message operator";
-      operatorMessage.innerHTML = `
-        <div class="message-header">${escapeHTML(operatorHeader)}</div>
-        <div class="message-text">${formatSnippet(
-          entry.template_text || ""
-        )}</div>
-      `;
-      root.appendChild(operatorMessage);
+  }
+
+  const existingNodes = state.chatNodes;
+
+  const nextNodes = new Map();
+
+  const fragment = document.createDocumentFragment();
+
+  list.forEach((entry) => {
+
+    const isClient = entry.sender === "client" || entry.sender === "user";
+
+    let message = existingNodes.get(entry.id);
+
+    if (!message) {
+
+      message = document.createElement("div");
+
+      message.className = "chat-message";
+
+      message.dataset.messageId = String(entry.id);
+
+      const headerNode = document.createElement("div");
+
+      headerNode.className = "message-header";
+
+      message.appendChild(headerNode);
+
+      const bodyNode = document.createElement("div");
+
+      bodyNode.className = "message-text";
+
+      message.appendChild(bodyNode);
+
+      const metaNode = document.createElement("div");
+
+      metaNode.className = "message-meta";
+
+      message.appendChild(metaNode);
+
+      message._header = headerNode;
+
+      message._body = bodyNode;
+
+      message._meta = metaNode;
+
     }
+
+    if (isClient && message.dataset.clickBound !== "1") {
+
+      message.dataset.clickBound = "1";
+
+      message.addEventListener("click", () =>
+
+        setActiveChatMessage(entry.id, { manual: true })
+
+      );
+
+    }
+
+    let header = message._header || message.querySelector(".message-header");
+
+    let body = message._body || message.querySelector(".message-text");
+
+    let meta = message._meta || message.querySelector(".message-meta");
+
+    if (!message._header && header) {
+
+      message._header = header;
+
+    }
+
+    if (!message._body && body) {
+
+      message._body = body;
+
+    }
+
+    if (!meta) {
+
+      meta = document.createElement("div");
+
+      meta.className = "message-meta";
+
+      message.appendChild(meta);
+
+    }
+
+    if (!message._meta && meta) {
+
+      message._meta = meta;
+
+    }
+
+    message.className = "chat-message";
+
+    message.classList.toggle("client", isClient);
+
+    message.classList.toggle("operator", !isClient);
+
+    message.classList.toggle("clickable", isClient);
+
+    message.dataset.messageId = String(entry.id);
+
+    message.classList.toggle("active", entry.id === state.activeChatMessageId);
+
+    const author = isClient ? "Клиент" : "Поддержка";
+
+    const metaParts = [author, formatDateTime(entry.timestamp)].filter(Boolean);
+
+    if (header) {
+
+      header.textContent = metaParts.join(" • " );
+
+    }
+
+    if (body) {
+
+      body.innerHTML = formatSnippet(entry.text || "");
+
+    }
+
+    const timestampText = formatDateTime(entry.timestamp);
+
+    if (meta) {
+
+      if (timestampText) {
+
+        meta.textContent = timestampText;
+
+        meta.style.display = "";
+
+      } else {
+
+        meta.textContent = "";
+
+        meta.style.display = "none";
+
+      }
+
+    }
+
+    fragment.appendChild(message);
+
+    nextNodes.set(entry.id, message);
+
   });
 
-  root.scrollTop = root.scrollHeight;
+  root.replaceChildren(fragment);
+
+  state.chatNodes = nextNodes;
+
+  if (state.activeChatLocked) {
+
+    const activeNode = root.querySelector(`[data-message-id="${state.activeChatMessageId}"]`);
+
+    if (activeNode) {
+
+      activeNode.scrollIntoView({ block: "center" });
+
+    }
+
+  } else {
+
+    root.scrollTop = root.scrollHeight;
+
+  }
+
+}
+function findLatestClientMessage(messages = state.chatHistory) {
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+
+    const entry = messages[i];
+
+    if (entry.sender === "client" || entry.sender === "user") {
+
+      return entry;
+
+    }
+
+  }
+
+  return null;
+
+}
+
+function highlightActiveChatMessage() {
+
+  const nodes = document.querySelectorAll("#chatHistory .chat-message");
+
+  nodes.forEach((node) => {
+
+    const id = Number(node.dataset.messageId);
+
+    node.classList.toggle("active", id === state.activeChatMessageId);
+
+  });
+
+}
+
+function setActiveChatMessage(messageId, { autoProcess = false, manual = false } = {}) {
+
+  const target = state.chatHistory.find((entry) =>
+
+    entry.id === messageId && (entry.sender === "client" || entry.sender === "user")
+
+  );
+
+  if (!target) {
+
+    return;
+
+  }
+
+  state.activeChatMessageId = target.id;
+
+  state.activeChatLocked = Boolean(manual);
+
+  state.lastQuery = target.text || "";
+
+  highlightActiveChatMessage();
+
+  const template = document.querySelector("#responseTemplate");
+
+  if (template && (autoProcess || !template.value)) {
+
+    template.value = target.template_answer || "";
+
+  }
+
+  updateClassification({
+
+    category: target.category || null,
+
+    subcategory: target.subcategory || null,
+
+    category_confidence: null,
+
+    subcategory_confidence: null,
+
+  });
+
+  renderResults([]);
+
+  if (autoProcess && !manual && target.text) {
+
+    runWorkflow({ text: target.text, silent: true });
+
+  }
+
+}
+
+function getActiveClientMessage() {
+
+  if (!state.chatHistory.length) {
+
+    return null;
+
+  }
+
+  if (state.activeChatMessageId) {
+
+    const selected = state.chatHistory.find((entry) =>
+
+      entry.id === state.activeChatMessageId &&
+
+      (entry.sender === "client" || entry.sender === "user")
+
+    );
+
+    if (selected) {
+
+      return selected;
+
+    }
+
+  }
+
+  return findLatestClientMessage(state.chatHistory);
+
+}
+
+async function refreshChatHistory({ silent = false } = {}) {
+
+  try {
+
+    const data = await fetchChatHistory();
+
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+
+    const serialized = JSON.stringify(messages);
+
+    const changed = serialized !== state.chatHistorySignature;
+
+    if (changed) {
+
+      renderChatHistory(messages);
+
+    } else {
+
+      state.chatHistory = messages;
+
+      highlightActiveChatMessage();
+
+    }
+
+    const latestClient = findLatestClientMessage(messages);
+
+    if (latestClient) {
+
+      const activeExists =
+
+        state.activeChatMessageId &&
+        messages.some(
+
+          (entry) =>
+
+            entry.id === state.activeChatMessageId &&
+            (entry.sender === "client" || entry.sender === "user")
+
+        );
+
+      if (!activeExists) {
+
+        state.activeChatLocked = false;
+
+        setActiveChatMessage(latestClient.id, { autoProcess: changed, manual: false });
+
+      } else if (!state.activeChatLocked && changed && latestClient.id !== state.activeChatMessageId) {
+
+        setActiveChatMessage(latestClient.id, { autoProcess: true, manual: false });
+
+      } else {
+
+        highlightActiveChatMessage();
+
+      }
+
+    } else {
+
+      state.activeChatMessageId = null;
+
+      state.activeChatLocked = false;
+
+      highlightActiveChatMessage();
+
+    }
+
+  } catch (err) {
+
+    if (!silent) {
+
+      console.warn("Не удалось получить чат:", err);
+
+    }
+
+  }
+
 }
 
 function setChoiceButtonState(
@@ -297,7 +643,9 @@ function renderResults(items) {
   if (!root) return;
   root.innerHTML = "";
 
-  if (!items.length) {
+  const visibleItems = items.slice(0, 3);
+
+  if (!visibleItems.length) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
     const thresholdText = SCORE_THRESHOLD.toFixed(1);
@@ -306,7 +654,7 @@ function renderResults(items) {
     return;
   }
 
-  items.forEach((item) => {
+  visibleItems.forEach((item) => {
     const li = document.createElement("li");
     const isSelected = Number(item.id) === Number(state.selectedResultId);
     li.className = "similar-question";
@@ -315,43 +663,10 @@ function renderResults(items) {
     }
     li.innerHTML = `
       <div class="question-title">${escapeHTML(item.title || "Без названия")}</div>
-      <div class="question-category">${escapeHTML(item.category || "")} — ${escapeHTML(item.subcategory || "")}</div>
       <p class="question-snippet">${formatSnippet(item.snippet || "")}</p>
-      <div class="question-meta" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span>score: ${Number(item.score ?? 0).toFixed(3)}</span>
-        <button class="choice-btn" data-action="like">Полезно</button>
-        <button class="choice-btn" data-action="dislike">Не полезно</button>
-      </div>
     `;
 
-    li
-      .querySelector('[data-action="like"]')
-      ?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        submitFeedback(
-          state.lastQuery,
-          item.id,
-          true,
-          "Спасибо за оценку!"
-        );
-      });
-
-    li
-      .querySelector('[data-action="dislike"]')
-      ?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        submitFeedback(
-          state.lastQuery,
-          item.id,
-          false,
-          "Спасибо, мы учтем ваш отзыв."
-        );
-      });
-
-    li.addEventListener("click", (event) => {
-      if (event.target.closest("[data-action]")) {
-        return;
-      }
+    li.addEventListener("click", () => {
       if (Number(state.selectedResultId) === Number(item.id)) {
         return;
       }
@@ -524,7 +839,8 @@ function updateClassification(raw) {
 
 function applyStats(summary) {
   if (!summary) return;
-  const { search, classify, feedback, history } = summary;
+  const { search, classify, feedback, classification_accuracy: accuracy } =
+    summary;
 
   const totalRequests = document.querySelector("#totalRequests");
   if (totalRequests) totalRequests.textContent = `${search.total}`;
@@ -545,18 +861,41 @@ function applyStats(summary) {
     clientRating.textContent = `${(feedback.positive_rate * 100).toFixed(1)}%`;
   }
 
-  const mainCategoryAccuracy = document.querySelector("#mainCategoryAccuracy");
-  if (mainCategoryAccuracy) {
-    mainCategoryAccuracy.textContent = `${(
-      classify.success_rate * 100
-    ).toFixed(1)}%`;
-  }
+  if (accuracy) {
+    const { templates, main, sub } = accuracy;
 
-  const subCategoryAccuracy = document.querySelector("#subCategoryAccuracy");
-  if (subCategoryAccuracy) {
-    subCategoryAccuracy.textContent = `${(
-      classify.avg_score * 100
-    ).toFixed(1)}%`;
+    const templateAccuracyNode = document.querySelector(
+      "#templateClassificationAccuracy"
+    );
+    if (templateAccuracyNode) {
+      templateAccuracyNode.textContent = `${(
+        templates.accuracy * 100
+      ).toFixed(1)}%`;
+    }
+    const templateTotalsNode = document.querySelector(
+      "#templateClassificationTotals"
+    );
+    if (templateTotalsNode) {
+      templateTotalsNode.textContent = `${templates.correct} / ${templates.total}`;
+    }
+
+    const mainAccuracyNode = document.querySelector("#mainCategoryAccuracy");
+    if (mainAccuracyNode) {
+      mainAccuracyNode.textContent = `${(main.accuracy * 100).toFixed(1)}%`;
+    }
+    const mainTotalsNode = document.querySelector("#mainCategoryTotals");
+    if (mainTotalsNode) {
+      mainTotalsNode.textContent = `${main.correct} / ${main.total}`;
+    }
+
+    const subAccuracyNode = document.querySelector("#subCategoryAccuracy");
+    if (subAccuracyNode) {
+      subAccuracyNode.textContent = `${(sub.accuracy * 100).toFixed(1)}%`;
+    }
+    const subTotalsNode = document.querySelector("#subCategoryTotals");
+    if (subTotalsNode) {
+      subTotalsNode.textContent = `${sub.correct} / ${sub.total}`;
+    }
   }
 
   renderChatHistory(history || []);
@@ -571,30 +910,54 @@ async function refreshStats() {
   }
 }
 
-async function runWorkflow() {
+async function runWorkflow({ text, silent = false } = {}) {
+
   if (state.isLoading) return;
 
-  const textarea = document.querySelector("#clientRequest");
-  const query = textarea?.value?.trim() ?? "";
+  const source = text ?? state.lastQuery ?? "";
+
+  const query = source.trim();
+
   if (!query) {
-    showBanner("Введите текст запроса.");
+
+    if (!silent) {
+
+      showBanner("Нет сообщения клиента.");
+
+    }
+
     return;
+
   }
 
+  state.lastQuery = query;
+
   state.isLoading = true;
-  toggleLoading(true);
-  showBanner("");
+
+  if (!silent) {
+
+    toggleLoading(true);
+
+    showBanner("");
+
+  }
 
   try {
-    state.lastQuery = query;
+
     const [searchResult, classifyResult] = await Promise.all([
+
       search(query),
+
       classify(query),
+
     ]);
 
     state.lastResults = searchResult.results ?? [];
+
     const primaryId = state.lastResults[0]?.id ?? null;
+
     setSelectedResult(primaryId, { rerender: false });
+
     renderResults(state.lastResults);
     if (!state.lastResults.length) {
       showBanner(
@@ -604,13 +967,36 @@ async function runWorkflow() {
     }
     updateClassification(classifyResult.raw);
 
-    refreshStats();
+    if (!silent) {
+
+      refreshStats();
+
+    }
+
   } catch (err) {
-    showBanner(err.message || "Произошла ошибка при обращении к API.");
+
+    if (!silent) {
+
+      showBanner(err.message || "Произошла ошибка при обращении к API.");
+
+    } else {
+
+      console.warn('Автообработка не удалась:', err);
+
+    }
+
   } finally {
+
     state.isLoading = false;
-    toggleLoading(false);
+
+    if (!silent) {
+
+      toggleLoading(false);
+
+    }
+
   }
+
 }
 
 function bindTemplateButtons() {
@@ -690,9 +1076,19 @@ function bindThemeToggle() {
 }
 
 function bindEvents() {
-  const button = document.querySelector("#processRequest");
-  if (button) {
-    button.addEventListener("click", runWorkflow);
+
+  const processButton = document.querySelector("#processRequest");
+
+  if (processButton) {
+
+    processButton.addEventListener("click", () => {
+
+      const target = getActiveClientMessage();
+
+      runWorkflow({ text: target?.text ?? "" });
+
+    });
+
   }
 
   const textarea = document.querySelector("#clientRequest");
@@ -742,64 +1138,95 @@ function bindEvents() {
   }
 
   const sendButton = document.querySelector("#sendResponse");
+
   if (sendButton) {
+
     sendButton.addEventListener("click", async () => {
+
       const template = document.querySelector("#responseTemplate");
-      const responseText = template?.value ?? "";
-      if (!responseText.trim()) {
-        showBanner("Нет ответа для отправки.");
+
+      const responseText = template?.value?.trim() ?? "";
+
+      if (!responseText) {
+
+        showBanner("Нет текста ответа.");
+
         return;
+
       }
 
-      const selected = getSelectedResult();
-      if (state.lastQuery) {
-        try {
+      const target = getActiveClientMessage();
+
+      if (!target) {
+
+        showBanner("Нет сообщения клиента для ответа.");
+
+        return;
+
+      }
+
+      try {
+
+        const selected = getSelectedResult();
+
+        await postChatMessage({
+
+          sender: "support",
+
+          text: responseText,
+
+          category: state.lastClassification?.category ?? target.category ?? null,
+
+          subcategory: state.lastClassification?.subcategory ?? target.subcategory ?? null,
+
+          template_id: selected ? selected.id : null,
+
+          template_answer: responseText,
+
+        });
+
+        if (state.lastQuery) {
+
           await postResponseLog({
+
             query: state.lastQuery,
+
             category: state.lastClassification?.category ?? null,
+
             subcategory: state.lastClassification?.subcategory ?? null,
+
             main_vote: state.classificationVotes.main,
+
             sub_vote: state.classificationVotes.sub,
+
             template_text: responseText,
+
             template_positive: state.templateVote,
+
             top_item_id: selected ? selected.id : null,
+
           });
-          await refreshStats();
-        } catch (err) {
-          console.warn("Не удалось сохранить историю ответа:", err);
+
         }
+
+        await refreshChatHistory({ silent: true });
+
+        refreshStats();
+
+        showBanner("Ответ отправлен клиенту.", "success");
+
+      } catch (err) {
+
+        console.error("Не удалось отправить ответ:", err);
+
+        showBanner("Не удалось отправить ответ.");
+
       }
 
-      let copySuccess = false;
-
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(responseText);
-          copySuccess = true;
-        } catch (err) {
-          console.warn("Clipboard API недоступен:", err);
-        }
-      }
-
-      if (!copySuccess && template?.select) {
-        template.focus();
-        template.select();
-        try {
-          copySuccess = document.execCommand("copy");
-        } catch (err) {
-          console.warn("document.execCommand('copy') не сработал:", err);
-          copySuccess = false;
-        }
-        window.getSelection()?.removeAllRanges?.();
-      }
-
-      if (copySuccess) {
-        showBanner("Ответ скопирован в буфер обмена.", "success");
-      } else {
-        showBanner("Скопируйте ответ вручную (Ctrl+C).", "warning");
-      }
     });
+
   }
+
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -810,5 +1237,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTemplateControls();
   updateClassificationControls();
   refreshStats();
+  refreshChatHistory();
   setInterval(refreshStats, 60_000);
+  setInterval(() => refreshChatHistory({ silent: true }), 5_000);
 });

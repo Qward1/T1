@@ -7,6 +7,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
@@ -19,6 +20,12 @@ FRONTEND_HOST = "127.0.0.1"
 FRONTEND_PORT = 3000
 PROJECT_ROOT = Path(__file__).parent.resolve()
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+SUPPORT_HOST = "127.0.0.1"
+SUPPORT_PORT = 3000
+CLIENT_HOST = "127.0.0.1"
+CLIENT_PORT = 3001
+SUPPORT_DIR = FRONTEND_DIR
+CLIENT_DIR = FRONTEND_DIR / "client"
 
 
 def _generate_favicon() -> bytes:
@@ -60,29 +67,29 @@ def _generate_favicon() -> bytes:
 FAVICON_BYTES = _generate_favicon()
 
 
-class FrontendHandler(SimpleHTTPRequestHandler):
-    """Serve the static frontend, falling back to index_clean.html."""
+class StaticHandler(SimpleHTTPRequestHandler):
+    """Serve a static directory with a predefined landing page."""
 
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault("directory", str(FRONTEND_DIR))
+    def __init__(self, *args, directory: str, default_file: str, **kwargs) -> None:
+        self._default_file = default_file
+        kwargs.setdefault("directory", directory)
         super().__init__(*args, **kwargs)
 
-    def do_GET(self):  # type: ignore[override]
-        if self.path in {"/", "/index.html"}:
-            self.path = "/index_clean.html"
+    def do_GET(self) -> None:  # type: ignore[override]
+        self._ensure_default_page()
         if self._serve_generated_favicon():
             return
-        return super().do_GET()
+        super().do_GET()
 
-    def do_HEAD(self):  # type: ignore[override]
-        if self.path in {"/", "/index.html"}:
-            self.path = "/index_clean.html"
+    def do_HEAD(self) -> None:  # type: ignore[override]
+        self._ensure_default_page()
         if self._serve_generated_favicon():
             return
-        return super().do_HEAD()
+        super().do_HEAD()
 
     def _serve_generated_favicon(self) -> bool:
-        if self.path != "/favicon.ico":
+        parsed = urlsplit(self.path)
+        if parsed.path != "/favicon.ico":
             return False
         self.send_response(200)
         self.send_header("Content-Type", "image/x-icon")
@@ -92,6 +99,13 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(FAVICON_BYTES)
         return True
+
+    def _ensure_default_page(self) -> None:
+        parsed = urlsplit(self.path)
+        if parsed.path not in {"/", "/index.html"}:
+            return
+        default_path = f"/{self._default_file}"
+        self.path = urlunsplit(("", "", default_path, parsed.query, parsed.fragment))
 
     def log_message(self, fmt: str, *args: object) -> None:  # pragma: no cover - dev helper
         message = fmt % args if args else fmt
@@ -108,33 +122,33 @@ async def _serve_backend() -> None:
     await serve(backend_app, config)
 
 
-def _serve_frontend() -> ThreadingHTTPServer:
-    """Start a thread-based HTTP server for the static frontend."""
-    if not FRONTEND_DIR.exists():
-        print(f"Frontend directory not found at {FRONTEND_DIR}", file=sys.stderr)
+def _serve_static(label: str, host: str, port: int, directory: Path, default_file: str) -> ThreadingHTTPServer:
+    """Start a thread-based HTTP server for a static directory."""
+    if not directory.exists():
+        print(f"{label} directory not found at {directory}", file=sys.stderr)
         sys.exit(1)
 
-    handler = partial(FrontendHandler)
-    server = ThreadingHTTPServer((FRONTEND_HOST, FRONTEND_PORT), handler)
+    handler = partial(StaticHandler, directory=str(directory), default_file=default_file)
+    server = ThreadingHTTPServer((host, port), handler)
     thread = threading.Thread(target=server.serve_forever, name="frontend-server", daemon=True)
     thread.start()
-    print(
-        f"[frontend] Serving {FRONTEND_DIR} on http://{FRONTEND_HOST}:{FRONTEND_PORT} "
-        "(open index_clean.html if the browser does not redirect automatically)"
-    )
+    print(f"[{label}] Serving {directory} on http://{host}:{port}")
     return server
 
 
 def main() -> None:
     """Bring up both backend and frontend locally without make/uvicorn."""
-    frontend_server = _serve_frontend()
+    support_server = _serve_static("support-ui", SUPPORT_HOST, SUPPORT_PORT, SUPPORT_DIR, "index_clean.html")
+    client_server = _serve_static("client-ui", CLIENT_HOST, CLIENT_PORT, CLIENT_DIR, "index.html")
     try:
         asyncio.run(_serve_backend())
     except KeyboardInterrupt:
         print("\nStopping development servers...")
     finally:
-        frontend_server.shutdown()
-        frontend_server.server_close()
+        client_server.shutdown()
+        client_server.server_close()
+        support_server.shutdown()
+        support_server.server_close()
 
 
 if __name__ == "__main__":

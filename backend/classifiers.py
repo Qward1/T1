@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
@@ -11,6 +13,7 @@ from openai import APIConnectionError, RateLimitError
 
 from .repository import fetch_all_templates, fetch_template_embeddings
 from .scibox_client import DEFAULT_EMBEDDING_MODEL, get_scibox_client
+from .storage import fetch_template_category_stats
 from .text_utils import normalize_text
 
 logger = logging.getLogger(__name__)
@@ -45,6 +48,7 @@ PRODUCT_LIST = [
     "кредит легко",
     "Старт",
     "старт",
+    "кредитка",
 ]
 
 _PRODUCT_MAP: Dict[str, str] = {item.casefold(): item for item in PRODUCT_LIST if item}
@@ -117,6 +121,54 @@ def refresh_template_cache() -> None:
     _TEMPLATE_CACHE = None
 
 
+_TEMPLATE_STATS_CACHE: Tuple[float, Dict[Tuple[str, str], Tuple[int, int]]] = (0.0, {})
+_TEMPLATE_STATS_TTL_SECONDS = 30.0
+
+
+def _get_template_category_stats() -> Dict[Tuple[str, str], Tuple[int, int]]:
+    """Fetch cached template quality stats with a short TTL."""
+    global _TEMPLATE_STATS_CACHE
+    now = time.monotonic()
+    cached_at, cached_value = _TEMPLATE_STATS_CACHE
+    if now - cached_at > _TEMPLATE_STATS_TTL_SECONDS:
+        try:
+            cached_value = fetch_template_category_stats()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("Failed to fetch template stats: %s", exc)
+            cached_value = {}
+        _TEMPLATE_STATS_CACHE = (now, cached_value)
+    return cached_value
+
+
+def calculate_weight_low_sensitivity(
+    total_answers: int,
+    correct_answers: int,
+    max_effect: float = 1.0,
+    tau: float = 100_000.0,
+    threshold: float = 1.0,
+) -> float:
+    if total_answers <= 0:
+        return 1.0
+    P = correct_answers / total_answers
+    limited_p = P
+    K = max_effect * (1 - math.exp(-total_answers / tau))
+    weight = 1 + K * (limited_p - threshold)
+    return max(weight, 0.0)
+
+
+def _compute_template_weights(entries: Tuple[TemplateEntry, ...]) -> np.ndarray:
+    if not entries:
+        return np.ones(0, dtype=float)
+
+    stats = _get_template_category_stats()
+    weights = np.ones(len(entries), dtype=float)
+    for idx, entry in enumerate(entries):
+        key = (entry.category, entry.subcategory)
+        total, correct = stats.get(key, (0, 0))
+        weights[idx] = max(calculate_weight_low_sensitivity(total, correct), 0.0)
+    return weights
+
+
 def _get_template_data() -> Tuple[Tuple[TemplateEntry, ...], np.ndarray]:
     global _TEMPLATE_CACHE
     if _TEMPLATE_CACHE is None:
@@ -150,31 +202,54 @@ def _encode_query(text: str) -> Tuple[np.ndarray, str]:
 
 def _match_template(
     text: str,
-) -> Tuple[Optional[TemplateEntry], float, List[Tuple[TemplateEntry, float]], str]:
+) -> Tuple[
+    Optional[TemplateEntry],
+    float,
+    float,
+    float,
+    List[Tuple[TemplateEntry, float, float, float]],
+    str,
+]:
     try:
         entries, matrix = _get_template_data()
     except RuntimeError as exc:
         logger.warning("Template cache unavailable: %s", exc)
-        return None, 0.0, [], normalize_text(text)
+        return None, 0.0, 0.0, 1.0, [], normalize_text(text)
 
     try:
         query_vector, normalized_query = _encode_query(text)
     except RuntimeError as exc:
         logger.warning("Failed to encode query: %s", exc)
-        return None, 0.0, [], normalize_text(text)
+        return None, 0.0, 0.0, 1.0, [], normalize_text(text)
 
     if matrix.size == 0:
-        return None, 0.0, [], normalized_query
+        return None, 0.0, 0.0, 1.0, [], normalized_query
 
-    scores = matrix @ query_vector
-    best_idx = int(np.argmax(scores))
-    best_score = float(scores[best_idx])
+    scores = np.asarray(matrix @ query_vector, dtype=float)
+    weights = _compute_template_weights(entries)
+    if weights.shape != scores.shape:
+        # Defensive fallback if dimensions drift for any reason.
+        weights = np.ones_like(scores, dtype=float)
 
-    top_indices = np.argsort(-scores)[: MAX_TOP_MATCHES or len(entries)]
-    top_matches = [(entries[idx], float(scores[idx])) for idx in top_indices]
+    adjusted_scores = scores * weights
+    best_idx = int(np.argmax(adjusted_scores))
+    best_weighted_score = float(adjusted_scores[best_idx])
+    best_raw_score = float(scores[best_idx])
+    best_weight = float(weights[best_idx])
+
+    top_indices = np.argsort(-adjusted_scores)[: MAX_TOP_MATCHES or len(entries)]
+    top_matches = [
+        (
+            entries[idx],
+            float(adjusted_scores[idx]),
+            float(scores[idx]),
+            float(weights[idx]),
+        )
+        for idx in top_indices
+    ]
 
     best_entry = entries[best_idx] if entries else None
-    return best_entry, best_score, top_matches, normalized_query
+    return best_entry, best_weighted_score, best_raw_score, best_weight, top_matches, normalized_query
 
 
 # -- Извлечение сущностей ---------------------------------------------------
@@ -257,8 +332,15 @@ def classify_and_ner(text: str) -> Dict[str, Any]:
     cleaned_text = text.strip()
     products = detect_products(cleaned_text)
 
-    best_entry, raw_score, top_matches, normalized_query = _match_template(cleaned_text)
-    confidence = max(raw_score, 0.0)
+    (
+        best_entry,
+        weighted_score,
+        raw_score,
+        best_weight,
+        top_matches,
+        normalized_query,
+    ) = _match_template(cleaned_text)
+    confidence = max(weighted_score, 0.0)
     below_threshold = raw_score < SIMILARITY_THRESHOLD
 
     category = best_entry.category if best_entry else None
@@ -274,9 +356,11 @@ def classify_and_ner(text: str) -> Dict[str, Any]:
             "question": match.question,
             "category": match.category,
             "subcategory": match.subcategory,
-            "score": max(score, 0.0),
+            "score": max(weighted, 0.0),
+            "raw_score": max(raw, 0.0),
+            "weight": weight,
         }
-        for match, score in top_matches
+        for match, weighted, raw, weight in top_matches
     ]
 
     return {
@@ -289,6 +373,7 @@ def classify_and_ner(text: str) -> Dict[str, Any]:
         "matched_template_id": best_entry.id if best_entry else None,
         "matched_template_score": confidence,
         "matched_template_raw_score": raw_score,
+        "matched_template_weight": best_weight,
         "below_threshold": below_threshold,
         "entities": entities,
         "products": products,

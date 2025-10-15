@@ -254,7 +254,15 @@
             gap: var(--space-16);
         }
 
-        .panel-section {
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-8);
+            margin-bottom: var(--space-12);
+        }
+
+.panel-section {
             background: var(--color-surface);
             border: 1px solid var(--color-border);
             border-radius: var(--radius-lg);
@@ -510,12 +518,42 @@
             background: var(--color-chat-bg);
             border-radius: var(--radius-base);
             border: 1px solid var(--color-border-light);
-            min-height: 200px;
-            max-height: 300px;
+            min-height: 360px;
+            max-height: 520px;
             display: flex;
             flex-direction: column;
             gap: var(--space-8);
         }
+        .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-16);
+            height: 100%;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-8);
+            margin-bottom: var(--space-12);
+        }
+
+        .chat-hint {
+            margin-top: var(--space-12);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .chat-message.clickable {
+            cursor: pointer;
+        }
+
+        .chat-message.active {
+            outline: 2px solid rgba(var(--color-primary-rgb), 0.25);
+            box-shadow: var(--shadow-sm);
+        }
+
         
         .chat-history:empty::before {
             content: 'История чата пуста';
@@ -715,7 +753,7 @@
             }
 
             .chat-history {
-                max-height: 200px;
+                max-height: 220px;
             }
 
             .message-text {
@@ -780,31 +818,61 @@
                 <div class="request-layout">
                     <!-- Left Panel -->
                     <div class="left-panel">
-                        <div class="panel-section">
-                            <h2 class="section-title">Запрос клиента</h2>
-                            <div class="form-group">
-                                <textarea 
-                                    id="clientRequest" 
-                                    class="form-control large" 
-                                ></textarea>
+                        <div class="panel-section chat-wrapper">
+                            <div class="chat-header">
+                                <h2 class="section-title">Чат с клиентом</h2>
+                                <button class="btn btn-secondary" id="chatRefresh">Обновить</button>
                             </div>
-                            <button class="btn btn-primary" id="processRequest">Обработать запрос</button>
-                        </div>
-
-                        <!-- Chat History -->
-                        <div class="panel-section" style="flex: 0 0 40%; display: flex; flex-direction: column;">
-                            <h2 class="section-title">История чата</h2>
                             <div id="chatHistory" class="chat-history">
-                                <!-- История чата будет заполняться динамически -->
+                                <!-- История сообщений появится здесь -->
                             </div>
+                            <p class="chat-hint">Выберите сообщение клиента слева, чтобы подготовить ответ.</p>
                         </div>
                     </div>
 
                     <!-- Right Panel -->
+<!-- Right Panel -->
                     <div class="right-panel">
+                        <!-- Template Response -->
+                        <div class="panel-section">
+                            <h3 class="section-title">Шаблон ответа</h3>
+                            <div class="form-group">
+                                <div class="template-question" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                                    <span>Подходит этот шаблон?</span>
+                                    <div class="template-buttons" style="display: flex; gap: var(--space-4);">
+                                        <button class="choice-btn" id="templateYes">Да</button>
+                                        <button class="choice-btn" id="templateNo">Нет</button>
+                                    </div>
+                                </div>
+                                <textarea 
+                                    id="responseTemplate" 
+                                    class="form-control medium" 
+                                    placeholder="Ответ шаблона появится после обработки запроса..."
+                                ></textarea>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-secondary" id="spellCheck">Проверить орфографию</button>
+                                <button class="btn btn-primary" id="sendResponse">Отправить ответ</button>
+                            </div>
+                        </div>
+
+                        <!-- Similar Questions -->
+                        <div class="panel-section">
+                            <h3 class="section-title">Топ-3 похожих вопроса из базы</h3>
+                            <ul class="similar-questions" id="results">
+                                <li class="similar-question">
+                                    <div class="question-title">Выберите запрос слева для поиска похожих вопросов</div>
+                                    <div class="question-category">Начните ввод запроса клиента</div>
+                                </li>
+                            </ul>
+                        </div>
+
                         <!-- Classification -->
                         <div class="panel-section" id="classify">
-                            <h3 class="section-title">Классификация вопроса</h3>
+                            <div class="panel-header">
+                                <h3 class="section-title">Классификация запроса</h3>
+                                <button class="btn btn-secondary" id="processRequest">Классифицировать</button>
+                            </div>
                             <div class="form-group">
                                 <label class="form-label">Основная категория:</label>
                                 <div class="classification-row">
@@ -824,40 +892,6 @@
                                         <button class="choice-btn" id="subCategoryNo">Неверно</button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Similar Questions -->
-                        <div class="panel-section">
-                            <h3 class="section-title">Топ-3 похожих вопроса из базы</h3>
-                            <ul class="similar-questions" id="results">
-                                <li class="similar-question">
-                                    <div class="question-title">Выберите запрос слева для поиска похожих вопросов</div>
-                                    <div class="question-category">Начните ввод запроса клиента</div>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <!-- Template Response -->
-                        <div class="panel-section">
-                            <h3 class="section-title">Шаблон ответа</h3>
-                            <div class="form-group">
-                                <div class="template-question" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
-                                    <span>Подходит этот шаблон?</span>
-                                    <div class="template-buttons" style="display: flex; gap: var(--space-4);">
-                                        <button class="choice-btn" id="templateYes">Да</button>
-                                        <button class="choice-btn" id="templateNo">Нет</button>
-                                    </div>
-                                </div>
-                                <textarea 
-                                    id="responseTemplate" 
-                                    class="form-control medium" 
-                                    placeholder="Шаблон ответа появится после выбора похожего вопроса..."
-                                ></textarea>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn btn-secondary" id="spellCheck">Исправить орфографию</button>
-                                <button class="btn btn-primary" id="sendResponse">Отправить ответ</button>
                             </div>
                         </div>
                     </div>
@@ -906,33 +940,41 @@
                 <h2 class="section-title" style="margin-bottom: var(--space-24);">Общая аналитика системы</h2>
                 <div class="analytics-grid" id="stats">
                     <div class="metric-card">
-                        <div class="metric-value" id="totalRequests">15,847</div>
-                        <div class="metric-label">Всего запросов</div>
+                        <div class="metric-value" id="totalRequests">0</div>
+                        <div class="metric-label">Total requests</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="todayRequests">247 <span style="color: var(--color-success); font-size: var(--font-size-sm);">+12%</span></div>
-                        <div class="metric-label">Запросы сегодня</div>
+                        <div class="metric-value" id="todayRequests">0</div>
+                        <div class="metric-label">Requests today</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="autoResolved">189 <span style="color: var(--color-success); font-size: var(--font-size-sm);">+8%</span></div>
-                        <div class="metric-label">Решено автоматически</div>
+                        <div class="metric-value" id="autoResolved">0</div>
+                        <div class="metric-label">Auto resolved</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="answerAccuracy">94.8% <span style="color: var(--color-success); font-size: var(--font-size-sm);">+2.1%</span></div>
-                        <div class="metric-label">Точность ответов</div>
+                        <div class="metric-value" id="answerAccuracy">0%</div>
+                        <div class="metric-label">Answer accuracy</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="clientRating">4.7 <span style="color: var(--color-success); font-size: var(--font-size-sm);">+0.3</span></div>
-                        <div class="metric-label">Оценка клиента</div>
+                        <div class="metric-value" id="clientRating">0%</div>
+                        <div class="metric-label">Client rating</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="mainCategoryAccuracy">93.8% <span style="color: var(--color-success); font-size: var(--font-size-sm);">+1.2%</span></div>
-                        <div class="metric-label">Точность Основная категория</div>
+                        <div class="metric-value" id="templateClassificationAccuracy">0%</div>
+                        <div class="metric-label">Template classification accuracy</div>
+                        <div class="metric-label" id="templateClassificationTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value" id="subCategoryAccuracy">92.5% <span style="color: var(--color-success); font-size: var(--font-size-sm);">+0.8%</span></div>
-                        <div class="metric-label">Точность Подкатегория</div>
+                        <div class="metric-value" id="mainCategoryAccuracy">0%</div>
+                        <div class="metric-label">Main category accuracy</div>
+                        <div class="metric-label" id="mainCategoryTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
                     </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="subCategoryAccuracy">0%</div>
+                        <div class="metric-label">Subcategory accuracy</div>
+                        <div class="metric-label" id="subCategoryTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
+                    </div>
+                </div>
                 </div>
             </div>
         </main>
