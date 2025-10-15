@@ -7,6 +7,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
@@ -73,21 +74,20 @@ class StaticHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:  # type: ignore[override]
-        if self.path in {"/", "/index.html"}:
-            self.path = f"/{self._default_file}"
+        self._ensure_default_page()
         if self._serve_generated_favicon():
             return
         super().do_GET()
 
     def do_HEAD(self) -> None:  # type: ignore[override]
-        if self.path in {"/", "/index.html"}:
-            self.path = f"/{self._default_file}"
+        self._ensure_default_page()
         if self._serve_generated_favicon():
             return
         super().do_HEAD()
 
     def _serve_generated_favicon(self) -> bool:
-        if self.path != "/favicon.ico":
+        parsed = urlsplit(self.path)
+        if parsed.path != "/favicon.ico":
             return False
         self.send_response(200)
         self.send_header("Content-Type", "image/x-icon")
@@ -97,6 +97,13 @@ class StaticHandler(SimpleHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(FAVICON_BYTES)
         return True
+
+    def _ensure_default_page(self) -> None:
+        parsed = urlsplit(self.path)
+        if parsed.path not in {"/", "/index.html"}:
+            return
+        default_path = f"/{self._default_file}"
+        self.path = urlunsplit(("", "", default_path, parsed.query, parsed.fragment))
 
     def log_message(self, fmt: str, *args: object) -> None:  # pragma: no cover - dev helper
         message = fmt % args if args else fmt

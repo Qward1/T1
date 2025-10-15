@@ -15,6 +15,8 @@ const state = {
   chatHistory: [],
   activeChatMessageId: null,
   chatHistorySignature: "",
+  activeChatLocked: false,
+  chatNodes: new Map(),
 };
 
 const sessionId = loadSessionId();
@@ -194,9 +196,11 @@ function renderChatHistory(entries) {
 
   state.chatHistorySignature = JSON.stringify(list);
 
-  root.innerHTML = "";
-
   if (!list.length) {
+
+    state.chatNodes = new Map();
+
+    root.innerHTML = "";
 
     const empty = document.createElement("div");
 
@@ -210,78 +214,179 @@ function renderChatHistory(entries) {
 
   }
 
+  if (!(state.chatNodes instanceof Map)) {
+
+    state.chatNodes = new Map();
+
+  }
+
+  const existingNodes = state.chatNodes;
+
+  const nextNodes = new Map();
+
+  const fragment = document.createDocumentFragment();
+
   list.forEach((entry) => {
 
     const isClient = entry.sender === "client" || entry.sender === "user";
 
-    const roleClass = isClient ? "client" : "operator";
+    let message = existingNodes.get(entry.id);
 
-    const message = document.createElement("div");
+    if (!message) {
 
-    message.className = `chat-message ${roleClass}`;
+      message = document.createElement("div");
 
-    message.dataset.messageId = String(entry.id);
+      message.className = "chat-message";
 
-    if (entry.id === state.activeChatMessageId) {
+      message.dataset.messageId = String(entry.id);
 
-      message.classList.add("active");
+      const headerNode = document.createElement("div");
+
+      headerNode.className = "message-header";
+
+      message.appendChild(headerNode);
+
+      const bodyNode = document.createElement("div");
+
+      bodyNode.className = "message-text";
+
+      message.appendChild(bodyNode);
+
+      const metaNode = document.createElement("div");
+
+      metaNode.className = "message-meta";
+
+      message.appendChild(metaNode);
+
+      message._header = headerNode;
+
+      message._body = bodyNode;
+
+      message._meta = metaNode;
 
     }
 
-    if (isClient) {
+    if (isClient && message.dataset.clickBound !== "1") {
 
-      message.classList.add("clickable");
+      message.dataset.clickBound = "1";
 
-      message.addEventListener("click", () => setActiveChatMessage(entry.id));
+      message.addEventListener("click", () =>
+
+        setActiveChatMessage(entry.id, { manual: true })
+
+      );
 
     }
 
-    const header = document.createElement("div");
+    let header = message._header || message.querySelector(".message-header");
 
-    header.className = "message-header";
+    let body = message._body || message.querySelector(".message-text");
 
-    const author = isClient ? "Клиент" : "Поддержка";
+    let meta = message._meta || message.querySelector(".message-meta");
 
-    const metaParts = [author, formatDateTime(entry.timestamp)].filter(Boolean);
+    if (!message._header && header) {
 
-    header.textContent = metaParts.join(" • " );
+      message._header = header;
 
-    message.appendChild(header);
+    }
 
-    const body = document.createElement("div");
+    if (!message._body && body) {
 
-    body.className = "message-text";
+      message._body = body;
 
-    body.innerHTML = formatSnippet(entry.text || "");
+    }
 
-    message.appendChild(body);
+    if (!meta) {
 
-    const details = [entry.category, entry.subcategory]
-
-      .filter(Boolean)
-
-      .join(" / " );
-
-    if (details) {
-
-      const meta = document.createElement("div");
+      meta = document.createElement("div");
 
       meta.className = "message-meta";
-
-      meta.textContent = details;
 
       message.appendChild(meta);
 
     }
 
-    root.appendChild(message);
+    if (!message._meta && meta) {
+
+      message._meta = meta;
+
+    }
+
+    message.className = "chat-message";
+
+    message.classList.toggle("client", isClient);
+
+    message.classList.toggle("operator", !isClient);
+
+    message.classList.toggle("clickable", isClient);
+
+    message.dataset.messageId = String(entry.id);
+
+    message.classList.toggle("active", entry.id === state.activeChatMessageId);
+
+    const author = isClient ? "Клиент" : "Поддержка";
+
+    const metaParts = [author, formatDateTime(entry.timestamp)].filter(Boolean);
+
+    if (header) {
+
+      header.textContent = metaParts.join(" • " );
+
+    }
+
+    if (body) {
+
+      body.innerHTML = formatSnippet(entry.text || "");
+
+    }
+
+    const timestampText = formatDateTime(entry.timestamp);
+
+    if (meta) {
+
+      if (timestampText) {
+
+        meta.textContent = timestampText;
+
+        meta.style.display = "";
+
+      } else {
+
+        meta.textContent = "";
+
+        meta.style.display = "none";
+
+      }
+
+    }
+
+    fragment.appendChild(message);
+
+    nextNodes.set(entry.id, message);
 
   });
 
-  root.scrollTop = root.scrollHeight;
+  root.replaceChildren(fragment);
+
+  state.chatNodes = nextNodes;
+
+  if (state.activeChatLocked) {
+
+    const activeNode = root.querySelector(`[data-message-id="${state.activeChatMessageId}"]`);
+
+    if (activeNode) {
+
+      activeNode.scrollIntoView({ block: "center" });
+
+    }
+
+  } else {
+
+    root.scrollTop = root.scrollHeight;
+
+  }
 
 }
-
 function findLatestClientMessage(messages = state.chatHistory) {
 
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -314,7 +419,7 @@ function highlightActiveChatMessage() {
 
 }
 
-function setActiveChatMessage(messageId, { autoProcess = false } = {}) {
+function setActiveChatMessage(messageId, { autoProcess = false, manual = false } = {}) {
 
   const target = state.chatHistory.find((entry) =>
 
@@ -329,6 +434,8 @@ function setActiveChatMessage(messageId, { autoProcess = false } = {}) {
   }
 
   state.activeChatMessageId = target.id;
+
+  state.activeChatLocked = Boolean(manual);
 
   state.lastQuery = target.text || "";
 
@@ -356,7 +463,7 @@ function setActiveChatMessage(messageId, { autoProcess = false } = {}) {
 
   renderResults([]);
 
-  if (autoProcess && target.text) {
+  if (autoProcess && !manual && target.text) {
 
     runWorkflow({ text: target.text, silent: true });
 
@@ -422,15 +529,39 @@ async function refreshChatHistory({ silent = false } = {}) {
 
     if (latestClient) {
 
-      if (!state.activeChatMessageId || changed) {
+      const activeExists =
 
-        setActiveChatMessage(latestClient.id, { autoProcess: changed });
+        state.activeChatMessageId &&
+        messages.some(
+
+          (entry) =>
+
+            entry.id === state.activeChatMessageId &&
+            (entry.sender === "client" || entry.sender === "user")
+
+        );
+
+      if (!activeExists) {
+
+        state.activeChatLocked = false;
+
+        setActiveChatMessage(latestClient.id, { autoProcess: changed, manual: false });
+
+      } else if (!state.activeChatLocked && changed && latestClient.id !== state.activeChatMessageId) {
+
+        setActiveChatMessage(latestClient.id, { autoProcess: true, manual: false });
+
+      } else {
+
+        highlightActiveChatMessage();
 
       }
 
     } else {
 
       state.activeChatMessageId = null;
+
+      state.activeChatLocked = false;
 
       highlightActiveChatMessage();
 
@@ -501,7 +632,9 @@ function renderResults(items) {
   if (!root) return;
   root.innerHTML = "";
 
-  if (!items.length) {
+  const visibleItems = items.slice(0, 3);
+
+  if (!visibleItems.length) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
     empty.innerHTML = `<div class="question-title">Ничего не найдено</div>`;
@@ -509,7 +642,7 @@ function renderResults(items) {
     return;
   }
 
-  items.forEach((item) => {
+  visibleItems.forEach((item) => {
     const li = document.createElement("li");
     const isSelected = Number(item.id) === Number(state.selectedResultId);
     li.className = "similar-question";
@@ -518,43 +651,10 @@ function renderResults(items) {
     }
     li.innerHTML = `
       <div class="question-title">${escapeHTML(item.title || "Без названия")}</div>
-      <div class="question-category">${escapeHTML(item.category || "")} — ${escapeHTML(item.subcategory || "")}</div>
       <p class="question-snippet">${formatSnippet(item.snippet || "")}</p>
-      <div class="question-meta" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span>score: ${Number(item.score ?? 0).toFixed(3)}</span>
-        <button class="choice-btn" data-action="like">Полезно</button>
-        <button class="choice-btn" data-action="dislike">Не полезно</button>
-      </div>
     `;
 
-    li
-      .querySelector('[data-action="like"]')
-      ?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        submitFeedback(
-          state.lastQuery,
-          item.id,
-          true,
-          "Спасибо за оценку!"
-        );
-      });
-
-    li
-      .querySelector('[data-action="dislike"]')
-      ?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        submitFeedback(
-          state.lastQuery,
-          item.id,
-          false,
-          "Спасибо, мы учтем ваш отзыв."
-        );
-      });
-
-    li.addEventListener("click", (event) => {
-      if (event.target.closest("[data-action]")) {
-        return;
-      }
+    li.addEventListener("click", () => {
       if (Number(state.selectedResultId) === Number(item.id)) {
         return;
       }
@@ -718,7 +818,8 @@ function updateClassification(raw) {
 
 function applyStats(summary) {
   if (!summary) return;
-  const { search, classify, feedback } = summary;
+  const { search, classify, feedback, classification_accuracy: accuracy } =
+    summary;
 
   const totalRequests = document.querySelector("#totalRequests");
   if (totalRequests) totalRequests.textContent = `${search.total}`;
@@ -739,18 +840,41 @@ function applyStats(summary) {
     clientRating.textContent = `${(feedback.positive_rate * 100).toFixed(1)}%`;
   }
 
-  const mainCategoryAccuracy = document.querySelector("#mainCategoryAccuracy");
-  if (mainCategoryAccuracy) {
-    mainCategoryAccuracy.textContent = `${(
-      classify.success_rate * 100
-    ).toFixed(1)}%`;
-  }
+  if (accuracy) {
+    const { templates, main, sub } = accuracy;
 
-  const subCategoryAccuracy = document.querySelector("#subCategoryAccuracy");
-  if (subCategoryAccuracy) {
-    subCategoryAccuracy.textContent = `${(
-      classify.avg_score * 100
-    ).toFixed(1)}%`;
+    const templateAccuracyNode = document.querySelector(
+      "#templateClassificationAccuracy"
+    );
+    if (templateAccuracyNode) {
+      templateAccuracyNode.textContent = `${(
+        templates.accuracy * 100
+      ).toFixed(1)}%`;
+    }
+    const templateTotalsNode = document.querySelector(
+      "#templateClassificationTotals"
+    );
+    if (templateTotalsNode) {
+      templateTotalsNode.textContent = `${templates.correct} / ${templates.total}`;
+    }
+
+    const mainAccuracyNode = document.querySelector("#mainCategoryAccuracy");
+    if (mainAccuracyNode) {
+      mainAccuracyNode.textContent = `${(main.accuracy * 100).toFixed(1)}%`;
+    }
+    const mainTotalsNode = document.querySelector("#mainCategoryTotals");
+    if (mainTotalsNode) {
+      mainTotalsNode.textContent = `${main.correct} / ${main.total}`;
+    }
+
+    const subAccuracyNode = document.querySelector("#subCategoryAccuracy");
+    if (subAccuracyNode) {
+      subAccuracyNode.textContent = `${(sub.accuracy * 100).toFixed(1)}%`;
+    }
+    const subTotalsNode = document.querySelector("#subCategoryTotals");
+    if (subTotalsNode) {
+      subTotalsNode.textContent = `${sub.correct} / ${sub.total}`;
+    }
   }
 
   renderChatHistory(history || []);

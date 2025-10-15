@@ -526,4 +526,5 @@ def read_stats_summary() -> StatsSummary:
         recent=summary["recent"],
         quality=summary["quality"],
         history=summary["history"],
+        classification_accuracy=summary["classification_accuracy"],
     )

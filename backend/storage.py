@@ -501,6 +501,52 @@ def fetch_template_quality() -> Dict[str, object]:
     return _build_feedback_stats(total=total, positive=positive)
 
 
+def fetch_template_accuracy_totals() -> Tuple[int, int]:
+    """Return total template answers with feedback and the number marked positive."""
+    with _get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(template_positive) AS total,
+                SUM(CASE WHEN template_positive = 1 THEN 1 ELSE 0 END) AS positive
+            FROM request_history
+            WHERE template_positive IS NOT NULL
+            """
+        ).fetchone()
+    total = int(row["total"] or 0)
+    positive = int(row["positive"] or 0)
+    return total, positive
+
+
+def fetch_template_category_stats() -> Dict[Tuple[str, str], Tuple[int, int]]:
+    """Return number of template responses and positives per category/subcategory."""
+    with _get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                category,
+                subcategory,
+                COUNT(template_positive) AS total,
+                SUM(CASE WHEN template_positive = 1 THEN 1 ELSE 0 END) AS positive
+            FROM request_history
+            WHERE category IS NOT NULL
+              AND subcategory IS NOT NULL
+            GROUP BY category, subcategory
+            """
+        ).fetchall()
+
+    stats: Dict[Tuple[str, str], Tuple[int, int]] = {}
+    for row in rows:
+        category = (row["category"] or "").strip()
+        subcategory = (row["subcategory"] or "").strip()
+        if not category or not subcategory:
+            continue
+        total = int(row["total"] or 0)
+        positive = int(row["positive"] or 0)
+        stats[(category, subcategory)] = (total, positive)
+    return stats
+
+
 def fetch_request_history(limit: int = 20) -> List[Dict[str, object]]:
     with _get_connection() as conn:
         rows = conn.execute(
@@ -626,6 +672,25 @@ def fetch_summary(
         "templates": fetch_template_quality(),
     }
 
+    classification_quality = quality["classification"]
+    main_overall = classification_quality["overall_main"]
+    sub_overall = classification_quality["overall_sub"]
+
+    template_total, template_positive = fetch_template_accuracy_totals()
+    template_accuracy = (
+        template_positive / template_total if template_total else 0.0
+    )
+
+    classification_accuracy = {
+        "templates": {
+            "total": template_total,
+            "correct": template_positive,
+            "accuracy": template_accuracy,
+        },
+        "main": main_overall,
+        "sub": sub_overall,
+    }
+
     history = fetch_request_history(limit=history_limit)
 
     return {
@@ -645,6 +710,7 @@ def fetch_summary(
             total=feedback_total,
             positive=feedback_positive,
         ),
+        "classification_accuracy": classification_accuracy,
         "recent": recent_events,
         "quality": quality,
         "history": history,

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, validator
 
 
 MAX_TOP_K = 10
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 3
 MAX_COMMENT_LENGTH = 500
 
 
@@ -96,6 +96,18 @@ class FeedbackStats(BaseModel):
     positive: int
     negative: int
     positive_rate: float
+
+
+class AccuracyBreakdown(BaseModel):
+    total: int
+    correct: int
+    accuracy: float
+
+
+class ClassificationAccuracy(BaseModel):
+    templates: AccuracyBreakdown
+    main: AccuracyBreakdown
+    sub: AccuracyBreakdown
 
 
 class ClassificationVoteRequest(BaseModel):
@@ -204,6 +216,7 @@ class StatsSummary(BaseModel):
     recent: List[EventRecord]
     quality: QualitySummary
     history: List[HistoryEntry] = Field(default_factory=list)
+    classification_accuracy: ClassificationAccuracy
 
 
 class IndexRebuildResponse(BaseModel):
