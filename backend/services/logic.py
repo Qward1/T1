@@ -59,7 +59,7 @@ settings = get_settings()
 init_storage()
 init_chat_storage()
 
-SEARCH_SCORE_THRESHOLD = 0.5
+SEARCH_SCORE_THRESHOLD = 0.45
 
 SPELLCHECK_SYSTEM_PROMPT = (
     "Ты редактор текста службы поддержки. Исправь орфографические, грамматические и "

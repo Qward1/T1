@@ -3,7 +3,7 @@ const API = (path) => `${location.origin.replace(/:\d+$/, ":8000")}${path}`;
 const sessionKey = "smart-support-session";
 const themeKey = "smart-support-theme";
 
-const SCORE_THRESHOLD = 0.5;
+const SCORE_THRESHOLD = 0.45;
 
 const state = {
   lastQuery: "",
@@ -648,7 +648,7 @@ function renderResults(items) {
   if (!visibleItems.length) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
-    const thresholdText = SCORE_THRESHOLD.toFixed(1);
+    const thresholdText = SCORE_THRESHOLD.toFixed(2);
     empty.innerHTML = `<div class="question-title">Подходящего ответа нет (score &lt; ${thresholdText}).</div>`;
     root.appendChild(empty);
     return;
@@ -961,7 +961,7 @@ async function runWorkflow({ text, silent = false } = {}) {
     renderResults(state.lastResults);
     if (!state.lastResults.length) {
       showBanner(
-        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(1)}).`,
+        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(2)}).`,
         "info"
       );
     }
