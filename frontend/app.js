@@ -10,7 +10,7 @@ const state = {
   lastResults: [],
   selectedResultId: null,
   lastClassification: null,
-  classificationVotes: { main: true, sub: null },
+  classificationVotes: { main: true, sub: true },
   templateVote: true,
   lastTopItemId: null,
   isLoading: false,
@@ -649,7 +649,7 @@ function renderResults(items) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
     const thresholdText = SCORE_THRESHOLD.toFixed(1);
-    empty.innerHTML = `<div class="question-title">Подходящего ответа нет (score &lt; ${thresholdText}).</div>`;
+    empty.innerHTML = `<div class="question-title">Подходящего ответа нет.</div>`;
     root.appendChild(empty);
     return;
   }
@@ -826,7 +826,7 @@ function updateClassification(raw) {
         belowThreshold: Boolean(normalized?.below_threshold),
       }
     : null;
-  state.classificationVotes = { main: true, sub: null };
+  state.classificationVotes = { main: true, sub: true };
   updateClassificationControls();
 
   const mainNode = document.querySelector("#mainCategory");
@@ -836,12 +836,7 @@ function updateClassification(raw) {
 
   if (mainNode) {
     if (normalized?.category && !belowThreshold) {
-      const percent = normalized.category_confidence
-        ? `${Math.round(normalized.category_confidence * 100)}%`
-        : "";
-      mainNode.textContent = percent
-        ? `${normalized.category} (${percent})`
-        : normalized.category;
+      mainNode.textContent = normalized.category;
       mainNode.classList.add("determined");
     } else {
       mainNode.textContent = "Неизвестно";
@@ -851,12 +846,7 @@ function updateClassification(raw) {
 
   if (subNode) {
     if (normalized?.subcategory && !belowThreshold) {
-      const percent = normalized.subcategory_confidence
-        ? `${Math.round(normalized.subcategory_confidence * 100)}%`
-        : "";
-      subNode.textContent = percent
-        ? `${normalized.subcategory} (${percent})`
-        : normalized.subcategory;
+      subNode.textContent = normalized.subcategory;
       subNode.classList.add("determined");
     } else {
       subNode.textContent = "Неизвестно";
@@ -989,7 +979,7 @@ async function runWorkflow({ text, silent = false } = {}) {
     renderResults(state.lastResults);
     if (!state.lastResults.length) {
       showBanner(
-        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(1)}).`,
+        `Подходящего ответа нет.`,
         "info"
       );
     }
