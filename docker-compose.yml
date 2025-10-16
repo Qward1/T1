@@ -21,6 +21,7 @@ services:
     volumes:
       - ./frontend/index_clean.html:/usr/share/nginx/html/index.html:ro
       - ./frontend/app.js:/usr/share/nginx/html/app.js:ro
+      - ./frontend/analyst:/usr/share/nginx/html/analyst:ro
       - ./deploy/nginx/operator.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "3000:80"
