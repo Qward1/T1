@@ -509,6 +509,61 @@
             font-size: var(--font-size-md);
             color: var(--color-text-secondary);
         }
+        .metric-meta {
+            margin-top: var(--space-4);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-container {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-24);
+        }
+
+        .analytics-section {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-24);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .analytics-overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: var(--space-16);
+        }
+
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-16);
+        }
+
+        .analytics-table th,
+        .analytics-table td {
+            padding: var(--space-12) var(--space-16);
+            border-bottom: 1px solid var(--color-border-light);
+            text-align: left;
+            font-size: var(--font-size-sm);
+        }
+
+        .analytics-table th {
+            color: var(--color-text-secondary);
+            font-weight: var(--font-weight-semibold);
+            background: rgba(var(--color-primary-rgb), 0.05);
+        }
+
+        .analytics-table tr:hover td {
+            background: var(--color-hover-bg);
+        }
+
+        .analytics-table .empty-row {
+            text-align: center;
+            color: var(--color-text-secondary);
+        }
+
 
         /* Modern Chat History Styles */
         .chat-history {
@@ -806,7 +861,6 @@
         <!-- Navigation -->
         <nav class="nav-tabs">
             <button class="nav-tab active" data-tab="requests">Обработка запросов</button>
-            <button class="nav-tab" data-tab="knowledge">База знаний</button>
             <button class="nav-tab" data-tab="analytics">Аналитика</button>
         </nav>
 
@@ -840,7 +894,7 @@
                                 <div class="template-question" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
                                     <span>Подходит этот шаблон?</span>
                                     <div class="template-buttons" style="display: flex; gap: var(--space-4);">
-                                        <button class="choice-btn" id="templateYes">Да</button>
+                                        <button class="choice-btn active" id="templateYes">Да</button>
                                         <button class="choice-btn" id="templateNo">Нет</button>
                                     </div>
                                 </div>
@@ -878,7 +932,7 @@
                                 <div class="classification-row">
                                     <div id="mainCategory" class="classification-display">Не определено</div>
                                     <div class="classification-buttons">
-                                        <button class="choice-btn" id="mainCategoryYes">Верно</button>
+                                        <button class="choice-btn active" id="mainCategoryYes">Верно</button>
                                         <button class="choice-btn" id="mainCategoryNo">Неверно</button>
                                     </div>
                                 </div>
@@ -897,47 +951,9 @@
                     </div>
                 </div>
 
-                <div class="analytics-section" style="margin-top: var(--space-24);">
-                    <h3 class="section-title" style="margin-bottom: var(--space-12);">Точность классификации</h3>
-                    <ul id="classificationBreakdown" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-8);">
-                        <li style="opacity: 0.6;">Нет данных для отображения</li>
-                    </ul>
-                </div>
-
-                <div class="analytics-section" style="margin-top: var(--space-24);">
-                    <h3 class="section-title" style="margin-bottom: var(--space-12);">Шаблоны ответов</h3>
-                    <div class="metric-card" style="max-width: 320px;">
-                        <div class="metric-value" id="templateAccuracy">0%</div>
-                        <div class="metric-label">Доля одобренных шаблонов</div>
-                        <div class="metric-label" id="templateTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Knowledge Base Tab -->
-            <div class="tab-content" id="knowledge">
-                <div class="search-section">
-                    <input type="text" id="kbSearch" class="search-control" placeholder="Поиск по базе знаний...">
-                </div>
-                
-                <table class="kb-table" id="kbTable">
-                    <thead>
-                        <tr>
-                            <th>Категория</th>
-                            <th>Подкатегория</th>
-                            <th>Вопрос</th>
-
-                        </tr>
-                    </thead>
-                    <tbody id="kbTableBody">
-                        <!-- Will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
 
             <!-- Analytics Tab -->
             <div class="tab-content" id="analytics">
-                <h2 class="section-title" style="margin-bottom: var(--space-24);">Общая аналитика системы</h2>
                 <div class="analytics-grid" id="stats">
                     <div class="metric-card">
                         <div class="metric-value" id="totalRequests">0</div>
@@ -962,19 +978,18 @@
                     <div class="metric-card">
                         <div class="metric-value" id="templateClassificationAccuracy">0%</div>
                         <div class="metric-label">Template classification accuracy</div>
-                        <div class="metric-label" id="templateClassificationTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
+                        <div class="metric-meta" id="templateClassificationTotals">0 / 0</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-value" id="mainCategoryAccuracy">0%</div>
                         <div class="metric-label">Main category accuracy</div>
-                        <div class="metric-label" id="mainCategoryTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
+                        <div class="metric-meta" id="mainCategoryTotals">0 / 0</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-value" id="subCategoryAccuracy">0%</div>
                         <div class="metric-label">Subcategory accuracy</div>
-                        <div class="metric-label" id="subCategoryTotals" style="font-size: var(--font-size-sm); opacity: 0.7;">0 / 0</div>
+                        <div class="metric-meta" id="subCategoryTotals">0 / 0</div>
                     </div>
-                </div>
                 </div>
             </div>
         </main>

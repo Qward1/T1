@@ -104,6 +104,56 @@
             flex-wrap: wrap;
         }
 
+        .feedback-actions {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .feedback-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .feedback-button {
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text-primary);
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .feedback-button:hover:not(:disabled) {
+            background: rgba(24, 119, 242, 0.08);
+            border-color: rgba(24, 119, 242, 0.4);
+        }
+
+        .feedback-button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .feedback-button.primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .feedback-button.primary:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+
+        .feedback-note {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
         form {
             border-top: 1px solid var(--border);
             padding: 22px 26px;
@@ -161,54 +211,6 @@
             background: rgba(24, 119, 242, 0.05);
         }
 
-        .analytics {
-            border-top: 1px solid var(--border);
-            padding: 26px;
-            background: #f8f9ff;
-        }
-
-        .analytics h2 {
-            margin: 0 0 16px;
-            font-size: 18px;
-            font-weight: 600;
-        }
-
-        .analytics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-            gap: 18px;
-        }
-
-        .analytics-card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 18px;
-            border: 1px solid rgba(24, 119, 242, 0.12);
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            min-height: 120px;
-        }
-
-        .analytics-card h3 {
-            margin: 0;
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .analytics-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--primary);
-        }
-
-        .analytics-meta {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
         @media (max-width: 600px) {
             body {
                 padding: 18px 10px;
@@ -231,9 +233,6 @@
                 min-height: 44px;
             }
 
-            .analytics {
-                padding: 22px;
-            }
         }
     </style>
 </head>
@@ -265,26 +264,7 @@
 
         <div id="status">Готов к приёму сообщений</div>
 
-        <section class="analytics" aria-live="polite">
-            <h2>Аналитика классификации</h2>
-            <div class="analytics-grid">
-                <article class="analytics-card">
-                    <h3>Шаблонные ответы</h3>
-                    <div class="analytics-value" id="templateAccuracyValue">–</div>
-                    <div class="analytics-meta" id="templateAccuracyMeta">0 / 0</div>
-                </article>
-                <article class="analytics-card">
-                    <h3>Основные категории</h3>
-                    <div class="analytics-value" id="mainAccuracyValue">–</div>
-                    <div class="analytics-meta" id="mainAccuracyMeta">0 / 0</div>
-                </article>
-                <article class="analytics-card">
-                    <h3>Подкатегории</h3>
-                    <div class="analytics-value" id="subAccuracyValue">–</div>
-                    <div class="analytics-meta" id="subAccuracyMeta">0 / 0</div>
-                </article>
-            </div>
-        </section>
+        
     </main>
 
     <script type="module" src="./app.js"></script>

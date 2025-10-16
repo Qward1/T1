@@ -10,8 +10,8 @@ const state = {
   lastResults: [],
   selectedResultId: null,
   lastClassification: null,
-  classificationVotes: { main: null, sub: null },
-  templateVote: null,
+  classificationVotes: { main: true, sub: null },
+  templateVote: true,
   lastTopItemId: null,
   isLoading: false,
   chatHistory: [],
@@ -631,7 +631,7 @@ function setSelectedResult(resultId, { rerender = true } = {}) {
   const selected = getSelectedResult();
   state.lastTopItemId = selected?.id ?? null;
   updateTemplate(selected);
-  state.templateVote = null;
+  state.templateVote = true;
   updateTemplateControls();
   if (rerender) {
     renderResults(state.lastResults);
@@ -681,6 +681,34 @@ function updateTemplate(firstResult) {
   const template = document.querySelector("#responseTemplate");
   if (!template) return;
   template.value = firstResult?.snippet || "";
+}
+
+function bindTabs() {
+  const buttons = Array.from(document.querySelectorAll(".nav-tab"));
+  const panels = Array.from(document.querySelectorAll(".tab-content"));
+  if (!buttons.length || !panels.length) {
+    return;
+  }
+
+  const activate = (tabId) => {
+    if (!tabId) return;
+    buttons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.tab === tabId);
+    });
+    panels.forEach((panel) => {
+      panel.classList.toggle("active", panel.id === tabId);
+    });
+    if (tabId === "analytics") {
+      refreshStats();
+    }
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => activate(button.dataset.tab));
+  });
+
+  const current = buttons.find((button) => button.classList.contains("active"));
+  activate(current?.dataset.tab || buttons[0]?.dataset.tab);
 }
 
 function submitFeedback(query, itemId, useful, successMessage) {
@@ -798,7 +826,7 @@ function updateClassification(raw) {
         belowThreshold: Boolean(normalized?.below_threshold),
       }
     : null;
-  state.classificationVotes = { main: null, sub: null };
+  state.classificationVotes = { main: true, sub: null };
   updateClassificationControls();
 
   const mainNode = document.querySelector("#mainCategory");
@@ -1168,6 +1196,8 @@ function bindEvents() {
       try {
 
         const selected = getSelectedResult();
+        const templateSource =
+          selected && typeof selected.snippet === "string" ? selected.snippet : null;
 
         await postChatMessage({
 
@@ -1182,6 +1212,8 @@ function bindEvents() {
           template_id: selected ? selected.id : null,
 
           template_answer: responseText,
+
+          template_source: templateSource,
 
         });
 
@@ -1234,6 +1266,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindTemplateButtons();
   bindClassificationButtons();
   bindThemeToggle();
+  bindTabs();
   updateTemplateControls();
   updateClassificationControls();
   refreshStats();

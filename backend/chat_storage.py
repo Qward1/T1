@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator, List, Optional, Sequence
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine, delete, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, create_engine, delete, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -26,6 +26,8 @@ class ChatMessage(Base):
     category = Column(String(128), nullable=True)
     subcategory = Column(String(128), nullable=True)
     template_answer = Column(Text, nullable=True)
+    template_source = Column(Text, nullable=True)
+    template_unmodified = Column(Boolean, nullable=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
 
 
@@ -51,6 +53,17 @@ def init_chat_storage() -> None:
         _ENGINE = _build_engine()
         SessionLocal = sessionmaker(bind=_ENGINE, autoflush=False, autocommit=False, expire_on_commit=False, future=True)
         Base.metadata.create_all(_ENGINE, checkfirst=True)
+        _ensure_schema(_ENGINE)
+
+
+def _ensure_schema(engine: Engine) -> None:
+    with engine.begin() as conn:
+        result = conn.exec_driver_sql("PRAGMA table_info(messages)")
+        columns = {row[1] for row in result}
+        if "template_source" not in columns:
+            conn.exec_driver_sql("ALTER TABLE messages ADD COLUMN template_source TEXT")
+        if "template_unmodified" not in columns:
+            conn.exec_driver_sql("ALTER TABLE messages ADD COLUMN template_unmodified INTEGER")
 
 
 @contextmanager
@@ -78,6 +91,11 @@ def persist_messages(messages: Sequence[ChatMessage]) -> List[ChatMessage]:
         for message in messages:
             session.refresh(message)
         return list(messages)
+
+
+def get_message_by_id(message_id: int) -> Optional[ChatMessage]:
+    with _session_scope() as session:
+        return session.get(ChatMessage, int(message_id))
 
 
 def list_messages() -> List[ChatMessage]:

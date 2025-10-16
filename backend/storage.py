@@ -181,6 +181,23 @@ def init_storage() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS message_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                message_id INTEGER NOT NULL,
+                session_id TEXT,
+                useful INTEGER NOT NULL CHECK(useful IN (0, 1))
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_message_feedback_msg
+            ON message_feedback(message_id)
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS request_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -367,6 +384,24 @@ def record_template_vote(*, is_positive: bool, session_id: Optional[str]) -> Non
         conn.commit()
 
 
+def record_message_feedback(
+    *,
+    message_id: int,
+    useful: bool,
+    session_id: Optional[str],
+) -> None:
+    normalized_session = session_id.strip() if session_id else None
+    with _get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO message_feedback (message_id, session_id, useful)
+            VALUES (?, ?, ?)
+            """,
+            (int(message_id), normalized_session, 1 if useful else 0),
+        )
+        conn.commit()
+
+
 def record_request_history(
     *,
     query: str,
@@ -547,6 +582,121 @@ def fetch_template_category_stats() -> Dict[Tuple[str, str], Tuple[int, int]]:
     return stats
 
 
+def fetch_operator_vote_totals() -> Tuple[int, int]:
+    """Return total operator classification votes and number marked correct."""
+    with _get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct,
+                COUNT(*) AS total
+            FROM classification_votes
+            """
+        ).fetchone()
+    total = int(row["total"] or 0) if row else 0
+    correct = int(row["correct"] or 0) if row else 0
+    return total, correct
+
+
+def fetch_message_feedback_totals() -> Tuple[int, int]:
+    """Return total client feedback records and positive responses."""
+    with _get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN useful = 1 THEN 1 ELSE 0 END) AS positive,
+                COUNT(*) AS total
+            FROM message_feedback
+            """
+        ).fetchone()
+    total = int(row["total"] or 0) if row else 0
+    positive = int(row["positive"] or 0) if row else 0
+    return total, positive
+
+
+def fetch_category_accuracy_stats(limit: int = 50) -> List[Dict[str, object]]:
+    """Return accuracy per category based on operator classification votes."""
+    with _get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                category,
+                COUNT(*) AS total,
+                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct
+            FROM classification_votes
+            WHERE target = 'main'
+              AND category IS NOT NULL
+              AND TRIM(category) <> ''
+            GROUP BY category
+            ORDER BY total DESC, category
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    stats: List[Dict[str, object]] = []
+    for row in rows:
+        category = (row["category"] or "").strip()
+        if not category:
+            continue
+        total = int(row["total"] or 0)
+        correct = int(row["correct"] or 0)
+        accuracy = correct / total if total else 0.0
+        stats.append(
+            {
+                "category": category,
+                "total": total,
+                "correct": correct,
+                "accuracy": accuracy,
+            }
+        )
+    return stats
+
+
+def fetch_subcategory_accuracy_stats(limit: int = 100) -> List[Dict[str, object]]:
+    """Return accuracy per subcategory based on operator classification votes."""
+    with _get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                category,
+                subcategory,
+                COUNT(*) AS total,
+                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct
+            FROM classification_votes
+            WHERE target = 'sub'
+              AND category IS NOT NULL
+              AND TRIM(category) <> ''
+              AND subcategory IS NOT NULL
+              AND TRIM(subcategory) <> ''
+            GROUP BY category, subcategory
+            ORDER BY total DESC, category, subcategory
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    stats: List[Dict[str, object]] = []
+    for row in rows:
+        category = (row["category"] or "").strip()
+        subcategory = (row["subcategory"] or "").strip()
+        if not category or not subcategory:
+            continue
+        total = int(row["total"] or 0)
+        correct = int(row["correct"] or 0)
+        accuracy = correct / total if total else 0.0
+        stats.append(
+            {
+                "category": category,
+                "subcategory": subcategory,
+                "total": total,
+                "correct": correct,
+                "accuracy": accuracy,
+            }
+        )
+    return stats
+
+
 def fetch_request_history(limit: int = 20) -> List[Dict[str, object]]:
     with _get_connection() as conn:
         rows = conn.execute(
@@ -691,6 +841,25 @@ def fetch_summary(
         "sub": sub_overall,
     }
 
+    operator_total, operator_correct = fetch_operator_vote_totals()
+    client_total, client_positive = fetch_message_feedback_totals()
+
+    analytics_overview = {
+        "operator": {
+            "total": operator_total,
+            "correct": operator_correct,
+            "accuracy": operator_correct / operator_total if operator_total else 0.0,
+        },
+        "client": {
+            "total": client_total,
+            "correct": client_positive,
+            "accuracy": client_positive / client_total if client_total else 0.0,
+        },
+    }
+
+    category_stats = fetch_category_accuracy_stats()
+    subcategory_stats = fetch_subcategory_accuracy_stats()
+
     history = fetch_request_history(limit=history_limit)
 
     return {
@@ -714,4 +883,9 @@ def fetch_summary(
         "recent": recent_events,
         "quality": quality,
         "history": history,
+        "analytics": {
+            "overview": analytics_overview,
+            "categories": category_stats,
+            "subcategories": subcategory_stats,
+        },
     }
