@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     admin_token: Optional[str] = Field(None, alias="ADMIN_TOKEN")
     frontend_origins_raw: Optional[str] = Field(None, alias="FRONTEND_ORIGINS")
 
-    rate_limit_window_seconds: int = Field(1000, alias="RATE_LIMIT_WINDOW")
-    rate_limit_max_requests: int = Field(60, alias="RATE_LIMIT_MAX_REQUESTS")
+    rate_limit_window_seconds: int = Field(2000, alias="RATE_LIMIT_WINDOW")
+    rate_limit_max_requests: int = Field(100, alias="RATE_LIMIT_MAX_REQUESTS")
     warmup_enabled: bool = Field(False, alias="WARMUP")
     max_request_bytes: int = Field(100_000, alias="MAX_REQUEST_BYTES")
 

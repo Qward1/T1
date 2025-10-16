@@ -1,11 +1,23 @@
 const API_BASE =
   window.API_BASE || `${window.location.protocol}//${window.location.hostname}:8000/api`;
 
+const SESSION_STORAGE_KEY = "client-chat-session";
+const FEEDBACK_STORAGE_KEY = "client-chat-feedback";
+
+const sessionId = loadSessionId();
+let feedbackState = loadFeedbackState();
+
 const messagesContainer = document.getElementById("messages");
 const form = document.getElementById("message-form");
 const textarea = document.getElementById("message-input");
 const sendButton = document.getElementById("send-button");
 const statusElement = document.getElementById("status");
+const templateAccuracyValue = document.getElementById("templateAccuracyValue");
+const templateAccuracyMeta = document.getElementById("templateAccuracyMeta");
+const mainAccuracyValue = document.getElementById("mainAccuracyValue");
+const mainAccuracyMeta = document.getElementById("mainAccuracyMeta");
+const subAccuracyValue = document.getElementById("subAccuracyValue");
+const subAccuracyMeta = document.getElementById("subAccuracyMeta");
 
 let isSending = false;
 let pollTimer = null;
@@ -18,11 +30,83 @@ const SENDER_CLASS_MAP = {
   bot: "bot",
 };
 
+function loadSessionId() {
+  try {
+    const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (stored) {
+      return stored;
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  const fresh =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, fresh);
+  } catch (_) {
+    /* ignore */
+  }
+  return fresh;
+}
+
+function loadFeedbackState() {
+  try {
+    const stored = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+    if (!stored) {
+      return new Set();
+    }
+    const parsed = JSON.parse(stored);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.map(String));
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return new Set();
+}
+
+function saveFeedbackState() {
+  try {
+    const payload = JSON.stringify(Array.from(feedbackState));
+    localStorage.setItem(FEEDBACK_STORAGE_KEY, payload);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function rememberFeedback(messageId) {
+  feedbackState.add(String(messageId));
+  saveFeedbackState();
+}
+
+function hasFeedback(messageId) {
+  return feedbackState.has(String(messageId));
+}
+
 async function postChatMessage(payload) {
   const response = await fetch(`${API_BASE}/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, session_id: sessionId }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Ошибка ${response.status}`);
+  }
+  return response.json();
+}
+
+async function postMessageFeedback(messageId, useful) {
+  const response = await fetch(`${API_BASE}/messages/${messageId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      useful: Boolean(useful),
+      session_id: sessionId,
+    }),
   });
 
   if (!response.ok) {
@@ -55,6 +139,78 @@ function renderMessages(messages) {
       meta.className = "meta";
       meta.textContent = timestamp;
       bubble.appendChild(meta);
+    }
+
+    const messageId = Number(message?.id);
+    const allowFeedback =
+      roleClass === "bot" &&
+      Boolean(message?.template_unmodified) &&
+      Number.isFinite(messageId);
+
+    if (allowFeedback) {
+      const actions = document.createElement("div");
+      actions.className = "feedback-actions";
+
+      if (hasFeedback(messageId)) {
+        const note = document.createElement("div");
+        note.className = "feedback-note";
+        note.textContent = "Спасибо за обратную связь!";
+        actions.appendChild(note);
+      } else {
+        const label = document.createElement("span");
+        label.className = "feedback-label";
+        label.textContent = "Ответ помог?";
+        actions.appendChild(label);
+
+        const positiveBtn = document.createElement("button");
+        positiveBtn.type = "button";
+        positiveBtn.className = "feedback-button primary";
+        positiveBtn.textContent = "Ответ помог";
+
+        const negativeBtn = document.createElement("button");
+        negativeBtn.type = "button";
+        negativeBtn.className = "feedback-button";
+        negativeBtn.textContent = "Ответ не помог";
+
+        const buttons = [positiveBtn, negativeBtn];
+        const setDisabled = (value) => {
+          buttons.forEach((btn) => {
+            btn.disabled = value;
+          });
+        };
+
+        const showThankYou = (useful) => {
+          actions.innerHTML = "";
+          const note = document.createElement("div");
+          note.className = "feedback-note";
+          note.textContent = useful
+            ? "Рады, что ответ помог!"
+            : "Спасибо, мы передадим ваш отзыв.";
+          actions.appendChild(note);
+        };
+
+        const handleClick = async (useful) => {
+          setDisabled(true);
+          try {
+            await postMessageFeedback(messageId, useful);
+            rememberFeedback(messageId);
+            showThankYou(useful);
+            clearStatus();
+          } catch (error) {
+            console.error("feedback error", error);
+            setStatus("Не удалось отправить отзыв. Попробуйте позже.");
+            setDisabled(false);
+          }
+        };
+
+        positiveBtn.addEventListener("click", () => handleClick(true));
+        negativeBtn.addEventListener("click", () => handleClick(false));
+
+        actions.appendChild(positiveBtn);
+        actions.appendChild(negativeBtn);
+      }
+
+      bubble.appendChild(actions);
     }
 
     messagesContainer.appendChild(bubble);

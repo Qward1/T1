@@ -104,6 +104,56 @@
             flex-wrap: wrap;
         }
 
+        .feedback-actions {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .feedback-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .feedback-button {
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text-primary);
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .feedback-button:hover:not(:disabled) {
+            background: rgba(24, 119, 242, 0.08);
+            border-color: rgba(24, 119, 242, 0.4);
+        }
+
+        .feedback-button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .feedback-button.primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .feedback-button.primary:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+
+        .feedback-note {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
         form {
             border-top: 1px solid var(--border);
             padding: 22px 26px;
@@ -213,6 +263,8 @@
         </form>
 
         <div id="status">Готов к приёму сообщений</div>
+
+        
     </main>
 
     <script type="module" src="./app.js"></script>

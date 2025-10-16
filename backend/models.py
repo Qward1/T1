@@ -95,6 +95,11 @@ class FeedbackResponse(BaseModel):
     ok: bool = True
 
 
+class MessageFeedbackRequest(BaseModel):
+    useful: bool
+    session_id: Optional[str] = Field(None, max_length=128)
+
+
 class ActionResponse(BaseModel):
     ok: bool = True
 
@@ -247,9 +252,10 @@ class ChatMessageRequest(BaseModel):
     subcategory: Optional[str] = Field(None, max_length=128)
     template_id: Optional[int] = None
     template_answer: Optional[str] = Field(None, max_length=100_000)
+    template_source: Optional[str] = Field(None, max_length=100_000)
     session_id: Optional[str] = Field(None, max_length=128)
 
-    @validator("text", "category", "subcategory", "template_answer", pre=True)
+    @validator("text", "category", "subcategory", "template_answer", "template_source", pre=True)
     def _trim_optional(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
@@ -266,6 +272,8 @@ class ChatMessagePayload(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     template_answer: Optional[str] = None
+    template_source: Optional[str] = None
+    template_unmodified: Optional[bool] = None
     timestamp: datetime
 
 

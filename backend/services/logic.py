@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from ..chat_storage import (
     ChatMessage,
     delete_all_messages,
+    get_message_by_id,
     init_chat_storage,
     list_messages,
     persist_messages,
@@ -30,6 +31,7 @@ from ..models import (
     ClassificationVoteRequest,
     FeedbackRequest,
     FeedbackResponse,
+    MessageFeedbackRequest,
     ResponseLogRequest,
     SearchRequest,
     SearchResponse,
@@ -49,6 +51,7 @@ from ..storage import (
     init_storage,
     log_event,
     record_classification_vote,
+    record_message_feedback,
     record_request_history,
     record_template_vote,
 )
@@ -168,6 +171,10 @@ def _normalize_sender(value: Optional[str]) -> str:
     return "client"
 
 
+def _normalize_answer_text(value: Optional[str]) -> str:
+    return " ".join((value or "").split())
+
+
 def _message_to_payload(message: ChatMessage) -> ChatMessagePayload:
     return ChatMessagePayload(
         id=message.id,
@@ -176,6 +183,8 @@ def _message_to_payload(message: ChatMessage) -> ChatMessagePayload:
         category=message.category,
         subcategory=message.subcategory,
         template_answer=message.template_answer,
+        template_source=message.template_source,
+        template_unmodified=bool(message.template_unmodified),
         timestamp=message.timestamp,
     )
 
@@ -349,6 +358,8 @@ def handle_chat_message(
     _ensure_size_limit(text)
     if request.template_answer:
         _ensure_size_limit(request.template_answer)
+    if request.template_source:
+        _ensure_size_limit(request.template_source)
 
     rate_key = _derive_rate_key(request.session_id, client_ip)
     _assert_rate_limit(rate_key)
@@ -416,12 +427,19 @@ def handle_chat_message(
             float(classification.get("confidence", 0.0) or 0.0),
         )
     elif sender == "support":
+        template_source = request.template_source
+        normalized_text = _normalize_answer_text(text)
+        normalized_source = _normalize_answer_text(template_source) if template_source else ""
+        template_unmodified = bool(template_source and normalized_text == normalized_source)
+
         support_message = ChatMessage(
             sender="support",
             text=text,
             category=request.category,
             subcategory=request.subcategory,
             template_answer=request.template_answer or text,
+            template_source=template_source,
+            template_unmodified=template_unmodified,
             timestamp=timestamp,
         )
         saved_messages = persist_messages([support_message])
@@ -434,14 +452,18 @@ def handle_chat_message(
                 "sender": "support",
                 "category": request.category,
                 "subcategory": request.subcategory,
+                "template_id": request.template_id,
+                "template_unmodified": bool(template_unmodified),
             },
             extra={"ip": client_ip} if client_ip else None,
         )
 
         logger.info(
-            "Support reply stored category=%s subcategory=%s",
+            "Support reply stored category=%s subcategory=%s template_id=%s unmodified=%s",
             request.category,
             request.subcategory,
+            request.template_id,
+            template_unmodified,
         )
     else:
         raise HTTPException(
@@ -499,6 +521,56 @@ def handle_feedback(
     )
 
     return FeedbackResponse()
+
+
+def handle_message_feedback(
+    message_id: int,
+    request: MessageFeedbackRequest,
+    *,
+    client_ip: Optional[str],
+    user_agent: Optional[str],
+) -> ActionResponse:
+    rate_key = _derive_rate_key(request.session_id, client_ip)
+    _assert_rate_limit(rate_key)
+
+    message = get_message_by_id(message_id)
+    if message is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found.",
+        )
+
+    if _normalize_sender(message.sender) != "support":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback is only available for support replies.",
+        )
+
+    if not message.template_unmodified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback is unavailable for this reply.",
+        )
+
+    record_message_feedback(
+        message_id=message.id,
+        session_id=request.session_id,
+        useful=bool(request.useful),
+    )
+
+    log_event(
+        "message_feedback",
+        session_id=request.session_id,
+        user_agent=user_agent,
+        payload={
+            "message_id": message.id,
+            "useful": bool(request.useful),
+            "template_unmodified": bool(message.template_unmodified),
+        },
+        extra={"ip": client_ip} if client_ip else None,
+    )
+
+    return ActionResponse()
 
 
 def handle_classification_vote(

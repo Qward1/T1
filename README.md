@@ -81,3 +81,17 @@ python -m hypercorn backend.api:app --reload --bind 127.0.0.1:8000
 ```powershell
 python dev.py
 ```
+
+## Docker
+
+1. Скопируйте `.env.example` в `.env` и заполните значения.
+2. Соберите и поднимите сервисы:
+   ```bash
+   docker compose up --build
+   ```
+3. После запуска:
+   - API: http://localhost:8000
+   - Панель оператора: http://localhost:3000
+   - Клиентский чат: http://localhost:3001
+
+Для остановки используйте `docker compose down`. Данные SQLite сохраняются в каталоге `data/` на хосте.

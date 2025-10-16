@@ -10,8 +10,8 @@ const state = {
   lastResults: [],
   selectedResultId: null,
   lastClassification: null,
-  classificationVotes: { main: null, sub: null },
-  templateVote: null,
+  classificationVotes: { main: true, sub: true },
+  templateVote: true,
   lastTopItemId: null,
   isLoading: false,
   chatHistory: [],
@@ -631,7 +631,7 @@ function setSelectedResult(resultId, { rerender = true } = {}) {
   const selected = getSelectedResult();
   state.lastTopItemId = selected?.id ?? null;
   updateTemplate(selected);
-  state.templateVote = null;
+  state.templateVote = true;
   updateTemplateControls();
   if (rerender) {
     renderResults(state.lastResults);
@@ -648,7 +648,7 @@ function renderResults(items) {
   if (!visibleItems.length) {
     const empty = document.createElement("li");
     empty.className = "similar-question";
-    const thresholdText = SCORE_THRESHOLD.toFixed(2);
+    const thresholdText = SCORE_THRESHOLD.toFixed(1);
     empty.innerHTML = `<div class="question-title">Подходящего ответа нет (score &lt; ${thresholdText}).</div>`;
     root.appendChild(empty);
     return;
@@ -681,6 +681,34 @@ function updateTemplate(firstResult) {
   const template = document.querySelector("#responseTemplate");
   if (!template) return;
   template.value = firstResult?.snippet || "";
+}
+
+function bindTabs() {
+  const buttons = Array.from(document.querySelectorAll(".nav-tab"));
+  const panels = Array.from(document.querySelectorAll(".tab-content"));
+  if (!buttons.length || !panels.length) {
+    return;
+  }
+
+  const activate = (tabId) => {
+    if (!tabId) return;
+    buttons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.tab === tabId);
+    });
+    panels.forEach((panel) => {
+      panel.classList.toggle("active", panel.id === tabId);
+    });
+    if (tabId === "analytics") {
+      refreshStats();
+    }
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => activate(button.dataset.tab));
+  });
+
+  const current = buttons.find((button) => button.classList.contains("active"));
+  activate(current?.dataset.tab || buttons[0]?.dataset.tab);
 }
 
 function submitFeedback(query, itemId, useful, successMessage) {
@@ -798,7 +826,7 @@ function updateClassification(raw) {
         belowThreshold: Boolean(normalized?.below_threshold),
       }
     : null;
-  state.classificationVotes = { main: null, sub: null };
+  state.classificationVotes = { main: true, sub: true };
   updateClassificationControls();
 
   const mainNode = document.querySelector("#mainCategory");
@@ -808,12 +836,7 @@ function updateClassification(raw) {
 
   if (mainNode) {
     if (normalized?.category && !belowThreshold) {
-      const percent = normalized.category_confidence
-        ? `${Math.round(normalized.category_confidence * 100)}%`
-        : "";
-      mainNode.textContent = percent
-        ? `${normalized.category} (${percent})`
-        : normalized.category;
+      mainNode.textContent = normalized.category;
       mainNode.classList.add("determined");
     } else {
       mainNode.textContent = "Неизвестно";
@@ -823,12 +846,7 @@ function updateClassification(raw) {
 
   if (subNode) {
     if (normalized?.subcategory && !belowThreshold) {
-      const percent = normalized.subcategory_confidence
-        ? `${Math.round(normalized.subcategory_confidence * 100)}%`
-        : "";
-      subNode.textContent = percent
-        ? `${normalized.subcategory} (${percent})`
-        : normalized.subcategory;
+      subNode.textContent = normalized.subcategory;
       subNode.classList.add("determined");
     } else {
       subNode.textContent = "Неизвестно";
@@ -961,7 +979,7 @@ async function runWorkflow({ text, silent = false } = {}) {
     renderResults(state.lastResults);
     if (!state.lastResults.length) {
       showBanner(
-        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(2)}).`,
+        `Подходящего ответа нет (score < ${SCORE_THRESHOLD.toFixed(1)}).`,
         "info"
       );
     }
@@ -1168,6 +1186,8 @@ function bindEvents() {
       try {
 
         const selected = getSelectedResult();
+        const templateSource =
+          selected && typeof selected.snippet === "string" ? selected.snippet : null;
 
         await postChatMessage({
 
@@ -1182,6 +1202,8 @@ function bindEvents() {
           template_id: selected ? selected.id : null,
 
           template_answer: responseText,
+
+          template_source: templateSource,
 
         });
 
@@ -1234,6 +1256,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindTemplateButtons();
   bindClassificationButtons();
   bindThemeToggle();
+  bindTabs();
   updateTemplateControls();
   updateClassificationControls();
   refreshStats();
