@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Support — Аналитика</title>
+    <style>
+        :root {
+            --color-background: #FAFAFA;
+            --color-surface: #FFFFFF;
+            --color-text-primary: #1C1E21;
+            --color-text-secondary: #65676B;
+            --color-primary: #1877F2;
+            --color-primary-hover: #166FE5;
+            --color-border: #E4E6EA;
+            --color-hover-bg: #F2F3F5;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+            --radius-base: 12px;
+            --radius-lg: 20px;
+            --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-weight-semibold: 600;
+            --font-size-sm: 13px;
+            --font-size-base: 14px;
+            --font-size-3xl: 24px;
+            --space-12: 12px;
+            --space-16: 16px;
+            --space-20: 20px;
+            --space-24: 24px;
+        }
+
+        [data-theme="dark"] {
+            --color-background: #0E1419;
+            --color-surface: #1C1E21;
+            --color-text-primary: #E4E6EA;
+            --color-text-secondary: #B0B3B8;
+            --color-primary: #2AABEE;
+            --color-primary-hover: #229ED9;
+            --color-border: #3A3B3C;
+            --color-hover-bg: #2A2D2F;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-family-base);
+            background-color: var(--color-background);
+            color: var(--color-text-primary);
+        }
+
+        .container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-16) var(--space-24);
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .logo {
+            font-weight: var(--font-weight-semibold);
+            font-size: 18px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: var(--space-16);
+            align-items: center;
+        }
+
+        .nav-tab {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-12) var(--space-16);
+            border-radius: var(--radius-base);
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            color: var(--color-text-secondary);
+            background: transparent;
+            font-size: var(--font-size-base);
+            transition: background 0.2s;
+        }
+
+        .nav-tab:hover {
+            background: var(--color-hover-bg);
+        }
+
+        .nav-tab.active {
+            color: var(--color-primary);
+            font-weight: var(--font-weight-semibold);
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-24);
+            padding: var(--space-24);
+            overflow-y: auto;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: var(--space-20);
+        }
+
+        .metric-card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-20);
+            box-shadow: var(--shadow-sm);
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-primary);
+            margin-bottom: 8px;
+        }
+
+        .metric-label {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+        }
+
+        .metric-meta {
+            margin-top: 6px;
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-section {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-24);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: var(--font-weight-semibold);
+        }
+
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: var(--space-16);
+            margin-top: var(--space-16);
+        }
+
+        .overview-card {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-base);
+            padding: var(--space-16);
+            background: var(--color-hover-bg);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .overview-title {
+            font-size: var(--font-size-sm);
+            text-transform: uppercase;
+            color: var(--color-text-secondary);
+        }
+
+        .overview-value {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-primary);
+        }
+
+        .overview-meta {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-20);
+            font-size: var(--font-size-base);
+        }
+
+        .analytics-table th,
+        .analytics-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--color-border);
+            text-align: left;
+        }
+
+        .analytics-table th {
+            text-transform: uppercase;
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-table .empty-row td {
+            text-align: center;
+            font-style: italic;
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-list {
+            list-style: none;
+            margin: var(--space-16) 0 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-12);
+        }
+
+        .analytics-list li {
+            display: flex;
+            justify-content: space-between;
+            gap: var(--space-12);
+            padding: var(--space-12) var(--space-16);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-base);
+            background: var(--color-hover-bg);
+        }
+
+        .analytics-list .event-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .event-kind {
+            font-weight: var(--font-weight-semibold);
+        }
+
+        .event-detail,
+        .event-time {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-list .empty {
+            justify-content: center;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: var(--space-16);
+            }
+
+            .analytics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .overview-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .analytics-list li {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">Smart Support</div>
+            <nav class="nav-tabs">
+                <a class="nav-tab" href="/">Рабочее место</a>
+                <span class="nav-tab active">Аналитика</span>
+            </nav>
+            <button class="theme-toggle" id="themeToggle" aria-label="Переключить тему">
+                <svg class="sun-icon" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="moon-icon" viewBox="0 0 24 24" style="display: none;">
+                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+                </svg>
+            </button>
+        </header>
+
+        <main class="main-content">
+            <section class="analytics-grid" id="stats">
+                <div class="metric-card">
+                    <div class="metric-value" id="totalRequests">0</div>
+                    <div class="metric-label">Всего запросов</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="todayRequests">0</div>
+                    <div class="metric-label">Запросов сегодня</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="autoResolved">0</div>
+                    <div class="metric-label">Автоответов</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="answerAccuracy">0%</div>
+                    <div class="metric-label">Точность ответов</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="clientRating">0%</div>
+                    <div class="metric-label">Оценка клиентов</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="templateClassificationAccuracy">0%</div>
+                    <div class="metric-label">Точность шаблонов</div>
+                    <div class="metric-meta" id="templateClassificationTotals">0 / 0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="mainCategoryAccuracy">0%</div>
+                    <div class="metric-label">Точность по категории</div>
+                    <div class="metric-meta" id="mainCategoryTotals">0 / 0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="subCategoryAccuracy">0%</div>
+                    <div class="metric-label">Точность по подкатегории</div>
+                    <div class="metric-meta" id="subCategoryTotals">0 / 0</div>
+                </div>
+            </section>
+
+            <section class="analytics-section">
+                <h2 class="section-title">Обзор качества</h2>
+                <div class="overview-grid">
+                    <div class="overview-card">
+                        <div class="overview-title">Оператор</div>
+                        <div class="overview-value" id="operatorAccuracy">0%</div>
+                        <div class="overview-meta" id="operatorTotals">0 / 0</div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="overview-title">Клиент</div>
+                        <div class="overview-value" id="clientAccuracy">0%</div>
+                        <div class="overview-meta" id="clientTotals">0 / 0</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="analytics-section">
+                <h2 class="section-title">Точность по категориям</h2>
+                <table class="analytics-table">
+                    <thead>
+                        <tr>
+                            <th>Категория</th>
+                            <th>Верно</th>
+                            <th>Всего</th>
+                            <th>Точность</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryAccuracyBody">
+                        <tr class="empty-row">
+                            <td colspan="4">Нет данных</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="analytics-section">
+                <h2 class="section-title">Точность по подкатегориям</h2>
+                <table class="analytics-table">
+                    <thead>
+                        <tr>
+                            <th>Категория</th>
+                            <th>Подкатегория</th>
+                            <th>Верно</th>
+                            <th>Всего</th>
+                            <th>Точность</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subcategoryAccuracyBody">
+                        <tr class="empty-row">
+                            <td colspan="5">Нет данных</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+        </main>
+    </div>
+
+    <script type="module" src="../app.js"></script>
+</body>
+</html>

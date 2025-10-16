@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 SIMILARITY_THRESHOLD = 0.35
 MAX_TOP_MATCHES = 5
 
-# -- Product detection -------------------------------------------------------
+
 
 PRODUCT_LIST = [
     "MORE",
@@ -116,7 +116,7 @@ _TEMPLATE_CACHE: Optional[Tuple[Tuple[TemplateEntry, ...], np.ndarray]] = None
 
 
 def refresh_template_cache() -> None:
-    """Clear cached template embeddings (call after rebuilding FAQ data)."""
+    
     global _TEMPLATE_CACHE
     _TEMPLATE_CACHE = None
 
@@ -126,7 +126,7 @@ _TEMPLATE_STATS_TTL_SECONDS = 30.0
 
 
 def _get_template_category_stats() -> Dict[Tuple[str, str], Tuple[int, int]]:
-    """Fetch cached template quality stats with a short TTL."""
+    
     global _TEMPLATE_STATS_CACHE
     now = time.monotonic()
     cached_at, cached_value = _TEMPLATE_STATS_CACHE
@@ -228,7 +228,7 @@ def _match_template(
     scores = np.asarray(matrix @ query_vector, dtype=float)
     weights = _compute_template_weights(entries)
     if weights.shape != scores.shape:
-        # Defensive fallback if dimensions drift for any reason.
+        
         weights = np.ones_like(scores, dtype=float)
 
     adjusted_scores = scores * weights
@@ -269,7 +269,7 @@ _CURRENCY_PATTERNS: Tuple[Tuple[re.Pattern[str], str], ...] = (
 
 
 def _fallback_entities(text: str) -> Dict[str, str]:
-    """Best-effort local entity extraction used when the remote model is unavailable."""
+    
     cleaned = (text or "").strip()
     if not cleaned:
         return {key: "" for key in EXPECTED_ENTITY_KEYS}

@@ -202,6 +202,9 @@
         }
 
         .nav-tab {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: var(--space-16) var(--space-20);
             border: none;
             background: none;
@@ -210,6 +213,7 @@
             cursor: pointer;
             border-bottom: 2px solid transparent;
             transition: all var(--duration-fast) var(--ease-standard);
+            text-decoration: none;
         }
 
         .nav-tab.active {
@@ -226,6 +230,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0;
         }
 
         .tab-content {
@@ -237,6 +242,12 @@
         .tab-content.active {
             display: flex;
             flex-direction: column;
+        }
+
+        #analytics {
+            gap: var(--space-24);
+            overflow-y: auto;
+            min-height: 0;
         }
 
         /* Request Processing Tab */
@@ -496,6 +507,130 @@
             padding: var(--space-20);
             box-shadow: var(--shadow-sm);
             text-align: center;
+        }
+
+        .analytics-section {
+            margin-top: var(--space-24);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-20);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: var(--space-16);
+            margin-top: var(--space-12);
+        }
+
+        .overview-card {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-base);
+            padding: var(--space-16);
+            background: var(--color-hover-bg);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-6);
+        }
+
+        .overview-title {
+            font-size: var(--font-size-base);
+            font-weight: var(--font-weight-medium);
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .overview-value {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-primary);
+        }
+
+        .overview-meta {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-16);
+            font-size: var(--font-size-sm);
+        }
+
+        .analytics-table th,
+        .analytics-table td {
+            padding: var(--space-10) var(--space-12);
+            border-bottom: 1px solid var(--color-border);
+            text-align: left;
+        }
+
+        .analytics-table th {
+            color: var(--color-text-secondary);
+            font-weight: var(--font-weight-semibold);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .analytics-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .analytics-table .empty-row td {
+            text-align: center;
+            font-style: italic;
+            color: var(--color-text-secondary);
+        }
+
+        .analytics-list {
+            list-style: none;
+            padding: 0;
+            margin: var(--space-16) 0 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-12);
+        }
+
+        .analytics-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-12);
+            padding: var(--space-12) var(--space-16);
+            border-radius: var(--radius-base);
+            background: var(--color-hover-bg);
+            border: 1px solid var(--color-border);
+        }
+
+        .analytics-list .event-info {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+        }
+
+        .analytics-list .event-kind {
+            font-weight: var(--font-weight-semibold);
+            text-transform: capitalize;
+        }
+
+        .analytics-list .event-detail {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+        }
+
+        .analytics-list .event-time {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+            white-space: nowrap;
+        }
+
+        .analytics-list .empty {
+            justify-content: center;
+            color: var(--color-text-secondary);
+            font-style: italic;
         }
 
         .metric-value {
@@ -799,12 +934,29 @@
                 grid-template-columns: 1fr;
             }
 
+            .overview-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .analytics-list li {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .analytics-list .event-time {
+                align-self: flex-end;
+            }
+
             .header {
                 padding: var(--space-12) var(--space-16);
             }
 
             .tab-content {
                 padding: var(--space-16);
+            }
+
+            #analytics {
+                gap: var(--space-16);
             }
 
             .chat-history {
@@ -860,8 +1012,8 @@
 
         <!-- Navigation -->
         <nav class="nav-tabs">
-            <button class="nav-tab active" data-tab="requests">Обработка запросов</button>
-            <button class="nav-tab" data-tab="analytics">Аналитика</button>
+            <button class="nav-tab active" data-tab="requests">Рабочее место</button>
+            <a class="nav-tab" href="/analyst">Аналитика</a>
         </nav>
 
         <!-- Main Content -->
@@ -950,49 +1102,7 @@
                         </div>
                     </div>
                 </div>
-
-
-            <!-- Analytics Tab -->
-            <div class="tab-content" id="analytics">
-                <div class="analytics-grid" id="stats">
-                    <div class="metric-card">
-                        <div class="metric-value" id="totalRequests">0</div>
-                        <div class="metric-label">Total requests</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="todayRequests">0</div>
-                        <div class="metric-label">Requests today</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="autoResolved">0</div>
-                        <div class="metric-label">Auto resolved</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="answerAccuracy">0%</div>
-                        <div class="metric-label">Answer accuracy</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="clientRating">0%</div>
-                        <div class="metric-label">Client rating</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="templateClassificationAccuracy">0%</div>
-                        <div class="metric-label">Template classification accuracy</div>
-                        <div class="metric-meta" id="templateClassificationTotals">0 / 0</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="mainCategoryAccuracy">0%</div>
-                        <div class="metric-label">Main category accuracy</div>
-                        <div class="metric-meta" id="mainCategoryTotals">0 / 0</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="subCategoryAccuracy">0%</div>
-                        <div class="metric-label">Subcategory accuracy</div>
-                        <div class="metric-meta" id="subCategoryTotals">0 / 0</div>
-                    </div>
-                </div>
-            </div>
-        </main>
+            </main>
     </div>
 
     

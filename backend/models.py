@@ -230,6 +230,38 @@ class HistoryEntry(BaseModel):
     top_item_id: Optional[int] = None
 
 
+class AnalyticsOverviewEntry(BaseModel):
+    total: int
+    correct: int
+    accuracy: float
+
+
+class AnalyticsOverview(BaseModel):
+    operator: AnalyticsOverviewEntry
+    client: AnalyticsOverviewEntry
+
+
+class CategoryAccuracy(BaseModel):
+    category: str
+    total: int
+    correct: int
+    accuracy: float
+
+
+class SubcategoryAccuracy(BaseModel):
+    category: Optional[str] = None
+    subcategory: str
+    total: int
+    correct: int
+    accuracy: float
+
+
+class AnalyticsSummary(BaseModel):
+    overview: AnalyticsOverview
+    categories: List[CategoryAccuracy]
+    subcategories: List[SubcategoryAccuracy]
+
+
 class StatsSummary(BaseModel):
     search: StatsBucket
     classify: StatsBucket
@@ -238,6 +270,7 @@ class StatsSummary(BaseModel):
     quality: QualitySummary
     history: List[HistoryEntry] = Field(default_factory=list)
     classification_accuracy: ClassificationAccuracy
+    analytics: Optional[AnalyticsSummary] = None
 
 
 class IndexRebuildResponse(BaseModel):

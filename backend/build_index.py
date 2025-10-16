@@ -51,7 +51,7 @@ def _reset_database(dataframe: pd.DataFrame) -> None:
 
     connection = sqlite3.connect(DB_PATH)
     try:
-        # Reset existing schema in-place to avoid issues with open file handles on Windows.
+        
         connection.execute("PRAGMA foreign_keys = OFF")
         connection.execute("DROP TABLE IF EXISTS faq_embeddings")
         connection.execute("DROP TABLE IF EXISTS faq")

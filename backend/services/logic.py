@@ -683,4 +683,5 @@ def read_stats_summary() -> StatsSummary:
         quality=summary["quality"],
         history=summary["history"],
         classification_accuracy=summary["classification_accuracy"],
+        analytics=summary.get("analytics"),
     )

@@ -19,7 +19,7 @@ def _split_csv(value: str | None) -> Tuple[str, ...]:
 
 
 class Settings(BaseSettings):
-    """Runtime configuration loaded from environment variables."""
+    
 
     scibox_api_key: str = Field(..., alias="SCIBOX_API_KEY")
     scibox_base_url: str = Field(..., alias="SCIBOX_BASE_URL")
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return shared Settings instance or raise a meaningful error."""
+    
 
     try:
         settings = Settings()  # type: ignore[call-arg]

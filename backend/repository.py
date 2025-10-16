@@ -152,7 +152,7 @@ def fetch_all_templates() -> List[Dict[str, str]]:
 
 
 def fetch_template_embeddings(ids: Iterable[int]) -> Dict[int, np.ndarray]:
-    """Return normalized embedding vectors for the given FAQ identifiers."""
+    
     id_list = sorted({int(value) for value in ids})
     if not id_list:
         return {}
@@ -181,7 +181,7 @@ def fetch_template_embeddings(ids: Iterable[int]) -> Dict[int, np.ndarray]:
 
 
 def fetch_all_embeddings() -> Tuple[List[int], np.ndarray]:
-    """Return all stored embeddings sorted by faq identifier."""
+   
     with _get_connection() as conn:
         rows = conn.execute(
             "SELECT faq_id, vector, dimension FROM faq_embeddings ORDER BY faq_id"

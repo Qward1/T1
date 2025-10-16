@@ -8,7 +8,7 @@ LEMMA_LANGS: Tuple[str, ...] = ("ru", "en")
 
 
 def normalize_text(value: str) -> str:
-    """Return a space-delimited string of lemmas for downstream embedding."""
+    
     if not value:
         return ""
     tokens = [token for token in simple_tokenizer(value.lower()) if token.strip()]

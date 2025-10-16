@@ -29,12 +29,12 @@ def _load_embeddings() -> Tuple[np.ndarray, Dict[int, int]]:
 
 
 def preload_embeddings() -> None:
-    """Load embeddings into memory once."""
+   
     _load_embeddings()
 
 
 def refresh_embeddings() -> None:
-    """Reset cached embeddings after the index has been rebuilt."""
+    
     _load_embeddings.cache_clear()
     _load_embeddings()
 

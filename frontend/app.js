@@ -5,6 +5,18 @@ const themeKey = "smart-support-theme";
 
 const SCORE_THRESHOLD = 0.5;
 
+const EVENT_LABELS = {
+  search: "Поиск",
+  classify: "Классификация",
+  feedback: "Отзыв",
+  chat: "Чат",
+  spellcheck: "Проверка орфографии",
+  message_feedback: "Оценка сообщения",
+  classification_vote: "Проверка классификации",
+  template_vote: "Оценка шаблона",
+  response: "Ответ клиенту",
+};
+
 const state = {
   lastQuery: "",
   lastResults: [],
@@ -677,6 +689,140 @@ function renderResults(items) {
   });
 }
 
+function formatPercent(value) {
+  const number = typeof value === "number" ? value : Number(value || 0);
+  if (!Number.isFinite(number)) {
+    return "0%";
+  }
+  return `${(number * 100).toFixed(1)}%`;
+}
+
+function updateOverviewCard(prefix, stats) {
+  const accuracyNode = document.querySelector(`#${prefix}Accuracy`);
+  const totalsNode = document.querySelector(`#${prefix}Totals`);
+  if (!accuracyNode || !totalsNode) return;
+  if (!stats) {
+    accuracyNode.textContent = "—";
+    totalsNode.textContent = "—";
+    return;
+  }
+  accuracyNode.textContent = formatPercent(stats.accuracy);
+  const total = Number.isFinite(stats.total) ? stats.total : Number(stats.total || 0);
+  const correct = Number.isFinite(stats.correct) ? stats.correct : Number(stats.correct || 0);
+  totalsNode.textContent = `${correct} / ${total}`;
+}
+
+function renderAnalyticsOverview(overview) {
+  updateOverviewCard("operator", overview?.operator);
+  updateOverviewCard("client", overview?.client);
+}
+
+function renderCategoryAccuracy(rows) {
+  const body = document.querySelector("#categoryAccuracyBody");
+  if (!body) return;
+  body.innerHTML = "";
+  const list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+  if (!list.length) {
+    const empty = document.createElement("tr");
+    empty.className = "empty-row";
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = "Нет данных";
+    empty.appendChild(cell);
+    body.appendChild(empty);
+    return;
+  }
+  list.forEach((item) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHTML(item?.category ?? "—")}</td>
+      <td>${Number(item?.correct ?? 0)}</td>
+      <td>${Number(item?.total ?? 0)}</td>
+      <td>${formatPercent(item?.accuracy)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderSubcategoryAccuracy(rows) {
+  const body = document.querySelector("#subcategoryAccuracyBody");
+  if (!body) return;
+  body.innerHTML = "";
+  const list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+  if (!list.length) {
+    const empty = document.createElement("tr");
+    empty.className = "empty-row";
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.textContent = "Нет данных";
+    empty.appendChild(cell);
+    body.appendChild(empty);
+    return;
+  }
+  list.forEach((item) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHTML(item?.category ?? "—")}</td>
+      <td>${escapeHTML(item?.subcategory ?? "—")}</td>
+      <td>${Number(item?.correct ?? 0)}</td>
+      <td>${Number(item?.total ?? 0)}</td>
+      <td>${formatPercent(item?.accuracy)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderAnalytics(analytics) {
+  if (!analytics) {
+    renderAnalyticsOverview(null);
+    renderCategoryAccuracy([]);
+    renderSubcategoryAccuracy([]);
+    return;
+  }
+  renderAnalyticsOverview(analytics.overview);
+  renderCategoryAccuracy(analytics.categories);
+  renderSubcategoryAccuracy(analytics.subcategories);
+}
+
+function renderRecentEvents(events) {
+  const root = document.querySelector("#recentEventsList");
+  if (!root) return;
+  root.innerHTML = "";
+  const list = Array.isArray(events) ? events.slice(0, 8) : [];
+  if (!list.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty";
+    empty.textContent = "Нет данных";
+    root.appendChild(empty);
+    return;
+  }
+  list.forEach((event) => {
+    const item = document.createElement("li");
+    const info = document.createElement("div");
+    info.className = "event-info";
+    const kind = document.createElement("div");
+    kind.className = "event-kind";
+    const label = EVENT_LABELS[event?.kind] || event?.kind || "—";
+    kind.textContent = label;
+    const detail = document.createElement("div");
+    detail.className = "event-detail";
+    const detailText = event?.detail
+      ? String(event.detail)
+      : event?.session_id
+      ? `session: ${event.session_id}`
+      : "—";
+    detail.textContent = detailText;
+    info.appendChild(kind);
+    info.appendChild(detail);
+    const time = document.createElement("div");
+    time.className = "event-time";
+    time.textContent = formatDateTime(event?.timestamp);
+    item.appendChild(info);
+    item.appendChild(time);
+    root.appendChild(item);
+  });
+}
+
 function updateTemplate(firstResult) {
   const template = document.querySelector("#responseTemplate");
   if (!template) return;
@@ -857,8 +1003,15 @@ function updateClassification(raw) {
 
 function applyStats(summary) {
   if (!summary) return;
-  const { search, classify, feedback, classification_accuracy: accuracy } =
-    summary;
+  const {
+    search,
+    classify,
+    feedback,
+    classification_accuracy: accuracy,
+    history = [],
+    analytics = null,
+    recent = [],
+  } = summary;
 
   const totalRequests = document.querySelector("#totalRequests");
   if (totalRequests) totalRequests.textContent = `${search.total}`;
@@ -916,7 +1069,9 @@ function applyStats(summary) {
     }
   }
 
-  renderChatHistory(history || []);
+  renderAnalytics(analytics);
+  renderRecentEvents(recent);
+  renderChatHistory(history);
 }
 
 async function refreshStats() {

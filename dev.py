@@ -29,9 +29,9 @@ CLIENT_DIR = FRONTEND_DIR / "client"
 
 
 def _generate_favicon() -> bytes:
-    """Return a tiny 16x16 ico matching the primary brand color."""
+    
     width = height = 16
-    color = bytes([0xF2, 0x77, 0x18, 0xFF])  # BGRA for #1877F2 with full opacity
+    color = bytes([0xF2, 0x77, 0x18, 0xFF])  
     xor_bitmap = color * (width * height)
     and_mask = b"\x00" * (((width + 31) // 32) * 4 * height)
     image_size = 40 + len(xor_bitmap) + len(and_mask)
@@ -68,7 +68,7 @@ FAVICON_BYTES = _generate_favicon()
 
 
 class StaticHandler(SimpleHTTPRequestHandler):
-    """Serve a static directory with a predefined landing page."""
+    
 
     def __init__(self, *args, directory: str, default_file: str, **kwargs) -> None:
         self._default_file = default_file
@@ -113,7 +113,7 @@ class StaticHandler(SimpleHTTPRequestHandler):
 
 
 async def _serve_backend() -> None:
-    """Run FastAPI backend with Hypercorn."""
+    
     config = Config()
     config.bind = [f"{BACKEND_HOST}:{BACKEND_PORT}"]
     config.reload = True
@@ -123,7 +123,7 @@ async def _serve_backend() -> None:
 
 
 def _serve_static(label: str, host: str, port: int, directory: Path, default_file: str) -> ThreadingHTTPServer:
-    """Start a thread-based HTTP server for a static directory."""
+    
     if not directory.exists():
         print(f"{label} directory not found at {directory}", file=sys.stderr)
         sys.exit(1)
@@ -137,7 +137,7 @@ def _serve_static(label: str, host: str, port: int, directory: Path, default_fil
 
 
 def main() -> None:
-    """Bring up both backend and frontend locally without make/uvicorn."""
+    
     support_server = _serve_static("support-ui", SUPPORT_HOST, SUPPORT_PORT, SUPPORT_DIR, "index_clean.html")
     client_server = _serve_static("client-ui", CLIENT_HOST, CLIENT_PORT, CLIENT_DIR, "index.html")
     try:
