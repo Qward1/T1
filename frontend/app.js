@@ -22,7 +22,7 @@ const state = {
   lastResults: [],
   selectedResultId: null,
   lastClassification: null,
-  classificationVotes: { main: true, sub: true },
+  classificationVotes: { main: null, sub: null },
   templateVote: true,
   lastTopItemId: null,
   isLoading: false,
@@ -721,7 +721,7 @@ function renderCategoryAccuracy(rows) {
   const body = document.querySelector("#categoryAccuracyBody");
   if (!body) return;
   body.innerHTML = "";
-  const list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!list.length) {
     const empty = document.createElement("tr");
     empty.className = "empty-row";
@@ -748,7 +748,7 @@ function renderSubcategoryAccuracy(rows) {
   const body = document.querySelector("#subcategoryAccuracyBody");
   if (!body) return;
   body.innerHTML = "";
-  const list = Array.isArray(rows) ? rows.slice(0, 10) : [];
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!list.length) {
     const empty = document.createElement("tr");
     empty.className = "empty-row";
@@ -881,21 +881,24 @@ function updateClassificationControls() {
   const hasMain = Boolean(classification?.category);
   const hasSub = Boolean(classification?.subcategory);
 
+  const mainVote = state.classificationVotes.main;
+  const subVote = state.classificationVotes.sub;
+
   setChoiceButtonState(document.querySelector("#mainCategoryYes"), {
-    active: state.classificationVotes.main === true,
+    active: hasMain && mainVote !== false,
     disabled: !hasMain,
   });
   setChoiceButtonState(document.querySelector("#mainCategoryNo"), {
-    active: state.classificationVotes.main === false,
+    active: hasMain && mainVote === false,
     disabled: !hasMain,
   });
 
   setChoiceButtonState(document.querySelector("#subCategoryYes"), {
-    active: state.classificationVotes.sub === true,
+    active: hasSub && subVote !== false,
     disabled: !hasSub,
   });
   setChoiceButtonState(document.querySelector("#subCategoryNo"), {
-    active: state.classificationVotes.sub === false,
+    active: hasSub && subVote === false,
     disabled: !hasSub,
   });
 }
@@ -958,7 +961,7 @@ async function handleClassificationVote(target, correct) {
   }
 }
 
-function updateClassification(raw) {
+function updateClassification(raw, { autoVote = false } = {}) {
   const normalized = raw ? { ...raw } : null;
   if (normalized?.below_threshold) {
     normalized.category = null;
@@ -972,7 +975,10 @@ function updateClassification(raw) {
         belowThreshold: Boolean(normalized?.below_threshold),
       }
     : null;
-  state.classificationVotes = { main: true, sub: true };
+  state.classificationVotes = {
+    main: null,
+    sub: null,
+  };
   updateClassificationControls();
 
   const mainNode = document.querySelector("#mainCategory");
@@ -998,6 +1004,63 @@ function updateClassification(raw) {
       subNode.textContent = "Неизвестно";
       subNode.classList.remove("determined");
     }
+  }
+
+
+  if (autoVote) {
+    autoSubmitClassificationVotes(state.lastClassification);
+  }
+}
+
+async function autoSubmitClassificationVotes(classification) {
+  if (!classification || classification.belowThreshold) {
+    return;
+  }
+
+  const votes = [];
+  if (classification.category) {
+    votes.push(
+      postClassificationVote({
+        target: "main",
+        correct: true,
+        category: classification.category,
+        subcategory: classification.subcategory,
+      }).then(() => {
+        state.classificationVotes.main = true;
+      })
+    );
+  }
+
+  if (classification.subcategory) {
+    votes.push(
+      postClassificationVote({
+        target: "sub",
+        correct: true,
+        category: classification.category,
+        subcategory: classification.subcategory,
+      }).then(() => {
+        state.classificationVotes.sub = true;
+      })
+    );
+  }
+
+  if (!votes.length) {
+    return;
+  }
+
+  try {
+    await Promise.all(votes);
+    refreshStats();
+  } catch (err) {
+    console.warn("Не удалось автоматически зафиксировать голос за классификацию:", err);
+    if (classification.category && state.classificationVotes.main !== true) {
+      state.classificationVotes.main = null;
+    }
+    if (classification.subcategory && state.classificationVotes.sub !== true) {
+      state.classificationVotes.sub = null;
+    }
+  } finally {
+    updateClassificationControls();
   }
 }
 
@@ -1138,7 +1201,7 @@ async function runWorkflow({ text, silent = false } = {}) {
         "info"
       );
     }
-    updateClassification(classifyResult.raw);
+    updateClassification(classifyResult.raw, { autoVote: true });
 
     if (!silent) {
 
